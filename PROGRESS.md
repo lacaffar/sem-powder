@@ -49,3 +49,24 @@
 
 - Limitation: OCR path not yet tested on a real instrument data bar (none in the available data). Debug images in `out/scale_debug/`.
 - Sanity check vs. PSD: a typical large particle in Fig 2a is ~130 px = 48 µm; reported D50 = 44 µm. Consistent.
+
+## Block 3: Segmentation (DONE)
+- `src/segment.py`. Preprocess: grayscale, CLAHE (tile ~ image/128), percentile-normalize to [0,1].
+- Foreground: lower threshold of 3-class multi-Otsu (substrate | shaded flanks | bright tops). Plain Otsu cut spheres in half (shaded lower flanks lost). Synthetic foreground IoU vs ray-cast GT: 0.94-0.96 (multi-Otsu) vs 0.85-0.89 (Otsu).
+- Watershed: markers = h-maxima of (distance transform / r_est + brightness smoothed at 0.25 r_est), h = 0.05. r_est = median max-inscribed radius of foreground components (image-derived, no alloy constants).
+  - Distance-only markers merged overlapping spheres: recall 0.61-0.69 on tuning renders.
+  - Brightness unsmoothed: synthetic recall 0.83-0.85, but shattered textured real spheres (659 fragments on Fig 2d). Smoothing 0.25 r_est: synthetic recall 0.77, precision 0.99, real images clean. Chose the setting that works on real powder.
+  - Tuning used only synthetic renders 49-50 per PSD; validation (Block 5) uses renders 1-48.
+- Cellpose cyto3 (cellpose 3.0.9), `channels=[0,0]`, on the preprocessed image. Two variants: `cellpose` (diameter=None, auto) and `cellpose_ws` (diameter = watershed median ECD). CPU time: 6-18 s (synthetic 512^2), 10-36 s (real 1024x768). `cellpose_ws` is ~2x faster (skips the size model).
+- Post: `clear_border` + remove < 20 px area.
+- Visual: Cellpose captures shaded flanks and separates satellites on AA7075; watershed leaves partial crescents on Fig 2d shaded sides.
+- Rettenberger Mask R-CNN: SKIPPED. Needs Detectron2, which has no Windows wheels and must be compiled; no C/C++ compiler on this machine (numpy source build failed for the same reason). Not worth risking the venv.
+- Overlays: `out/overlays/` (2 synthetic + 2 real, 3 methods).
+- `src/synthetic_gt.py` (ray-cast ground truth) written early to tune against; see Block 5.
+
+## Block 4: Metrics (DONE)
+- `src/metrics.py`: per particle area_px, area_um2, ECD (px, µm), perimeter, circularity 4πA/P² (clipped at 1), aspect ratio (major/minor), solidity, centroid.
+- Per image: count, D10/D50/D90 number- and volume-weighted (w ∝ ECD³, midpoint-CDF interpolation), mean circularity/aspect/solidity.
+- Satellite proxy: `irregular_frac` = fraction with solidity < 0.90 (coarse: satellites attached or agglomerates).
+- `analyze_image(path, method, um_per_px=None) -> (df, summary, labels, img, scale)` and `plot_psd()`.
+- First real number, Fig 2a cellpose: D10/D50/D90 vol = 17.9/32.7/53.3 µm vs laser 26.0/44.4/72.9 (D50 -26%). See Block 6.
