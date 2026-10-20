@@ -92,7 +92,7 @@ def detect_databar(img, min_frac=0.04, uni_thresh=0.45):
     u = _row_uniformity(img)
     is_bar = u > uni_thresh
     # close small gaps (text lines can reduce uniformity)
-    k = max(3, h // 100)
+    k = max(3, h // 100) | 1  # odd: an even kernel shifts the bar edge by one row
     is_bar = cv2.morphologyEx(is_bar.astype(np.uint8)[:, None], cv2.MORPH_CLOSE,
                               np.ones((k, 1), np.uint8))[:, 0].astype(bool)
     best = None

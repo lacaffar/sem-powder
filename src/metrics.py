@@ -16,8 +16,11 @@ PCTS = (10, 50, 90)
 
 def particle_table(labels: np.ndarray, um_per_px: float | None) -> pd.DataFrame:
     s = um_per_px if um_per_px else 1.0
+    H, W = labels.shape
     rows = []
     for rp in measure.regionprops(labels):
+        y0, x0, y1, x1 = rp.bbox
+        bw, bh = x1 - x0, y1 - y0
         a = float(rp.area)
         p = float(rp.perimeter) or np.nan
         maj, mnr = float(rp.axis_major_length), float(rp.axis_minor_length)
@@ -35,9 +38,13 @@ def particle_table(labels: np.ndarray, um_per_px: float | None) -> pd.DataFrame:
             "solidity": float(rp.solidity),
             "centroid_y": float(rp.centroid[0]),
             "centroid_x": float(rp.centroid[1]),
+            # Miles-Lantuejoul edge correction: edge-touching particles are dropped,
+            # so a particle of bbox (bw, bh) is only kept if it lies in a
+            # (W-bw) x (H-bh) window. Weight = W*H / that area (1 for tiny ones).
+            "edge_weight": (W * H) / max(1.0, (W - bw) * (H - bh)),
         })
     cols = ["id", "area_px", "area_um2", "ecd_px", "ecd_um", "perimeter_px", "circularity",
-            "aspect_ratio", "solidity", "centroid_y", "centroid_x"]
+            "aspect_ratio", "solidity", "centroid_y", "centroid_x", "edge_weight"]
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -62,6 +69,14 @@ def summarize(df: pd.DataFrame, um_per_px: float | None) -> dict:
     for p, a, b in zip(PCTS, nn, vv):
         out[f"D{p}_num"] = float(a)
         out[f"D{p}_vol"] = float(b)
+    # edge-corrected volume-weighted percentiles (Miles-Lantuejoul)
+    if len(d):
+        ew = df["edge_weight"].to_numpy()
+        for p, b in zip(PCTS, weighted_percentiles(d, d ** 3 * ew)):
+            out[f"D{p}_vol_ec"] = float(b)
+    else:
+        for p in PCTS:
+            out[f"D{p}_vol_ec"] = np.nan
     for k in ("circularity", "aspect_ratio", "solidity"):
         out[f"mean_{k}"] = float(df[k].mean()) if len(df) else np.nan
     # satellite / agglomerate flag: non-convex outline (satellites attached,
