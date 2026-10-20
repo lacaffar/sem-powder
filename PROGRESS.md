@@ -1,11 +1,11 @@
 # PROGRESS
 
 ## Summary (read this first)
-1. Blocks 1-2 done. Env works (`check_env.py` prints ok). Both datasets downloaded automatically.
-2. Scale: AA7075 TIFFs have NO data bar; µm/px read from Zeiss TIFF metadata (0.3722 µm/px). OCR scale-bar path tested on 5 rendered data bars: max error 0.25%.
-3. (pending) Segmentation, metrics, synthetic validation, real-image check, CLI, one-pager.
-4. Manual items for you: put Ti-6Al-4V / 316L images in `data/alloy2/` if you want Block 6 alloy-2 run.
-5. Disk: 12 GB free at start. Data on disk ~270 MB.
+1. All 8 blocks done. Demo: `python analyze.py samples --out out/demo` (watershed, ~1 s/image). One-pager: `ONE_PAGER.md`. Figures 1-4 + failures in `figures/`.
+2. Synthetic accuracy (exact 3D GT, 8 PSDs): watershed number D50 +12% (range +7 to +19%, always high), volume D50 +12%; Cellpose volume D50 6% abs. D90 ranks all 8 PSDs correctly (ρ = 1.0).
+3. Real AA7075 vs laser diffraction (volume, edge-corrected, watershed): D50 -14% (base), -8% (surface-mod TiC), -25% (volume-mod TiC, only 29 particles). D90 -17 to -42%: one 300x frame is too small a sample for D90.
+4. Skipped: Rettenberger model (needs Detectron2 compile, no compiler), second alloy (`data/alloy2/` empty), satellite fraction beyond a solidity proxy. Cellpose validated on 16 img/PSD, not 50 (CPU time).
+5. For you: drop Ti-6Al-4V / 316L images in `data/alloy2/` and run `python analyze.py data/alloy2` to cover the alloy-2 check. Keep the project at a short path on the lab PC (Windows path-length limit breaks the torch install).
 
 ## Block 1: Env + data (DONE)
 - Python 3.13.2, torch 2.14.1+cpu (already present), cellpose 3.0.9, easyocr 1.7.2, skimage 0.26, opencv-python-headless 5.0. Pinned in `requirements.txt`.
@@ -70,3 +70,72 @@
 - Satellite proxy: `irregular_frac` = fraction with solidity < 0.90 (coarse: satellites attached or agglomerates).
 - `analyze_image(path, method, um_per_px=None) -> (df, summary, labels, img, scale)` and `plot_psd()`.
 - First real number, Fig 2a cellpose: D10/D50/D90 vol = 17.9/32.7/53.3 µm vs laser 26.0/44.4/72.9 (D50 -26%). See Block 6.
+
+## Block 5: Synthetic validation (DONE)
+- `src/synthetic_gt.py`, `src/validate_synthetic.py` -> `out/synthetic_validation.csv` (+ `_summary.csv`, `_first16.csv`), `figures/fig2_synthetic_psd.png`, `figures/fig3_d50_parity.png`.
+- Camera geometry (from `blender_powder.py` + `blend.sh`; intrinsics are Blender 2.7x defaults since the script sets none): perspective camera at (0,0,10) looking down -z; 35 mm lens, 32 mm sensor; 1024^2 render at default 50% -> 512^2 PNG; f = 35/32 x 512 = 560 px; px/unit = 560 / (10 - z) = 56.0 at z=0, 50.9-62.2 over the particle box (z in [-1, 1]). Sphere `size` = radius. World xyz = [11,11,2] x json - [5.5,5.5,1].
+- Check: ray-cast foreground of the JSON spheres vs thresholded render, IoU 0.92; outlines sit on the rendered spheres (visual).
+- Visible GT: per-pixel ray-sphere z-buffer gives exact visible-pixel counts; keep spheres > 50% visible and not touching the frame. Sparse scenes: visible D50 = generating D50 within 1%.
+- Measured px -> units with ONE nominal scale (median px/unit of visible GT spheres = 56.0, what a calibrated SEM gives). Exact per-sphere px comparison also in CSV (`*_px` columns): same numbers within 1 pt.
+- Matching: Hungarian on centroids, tolerance max(3 px, 0.5 x GT diameter).
+- Images: watershed renders 1-48 per PSD (383; `a/particles37.json` is truncated upstream, skipped). Cellpose and cellpose_ws renders 1-16 per PSD (127 each). Deviation from ~50/PSD: Cellpose ran 20-60 s/image on this CPU (two parallel runs throttled each other), full set would have taken ~6 h. Renders 49-50 were the tuning set and are excluded.
+- Results, watershed (48 img/PSD) and Cellpose auto-diameter (16 img/PSD), errors vs visible GT:
+
+| PSD | true D50 vis / gen | WS D50 | WS err vis / gen | WS D10 / D90 err | WS vol D50 err | WS recall | CP D50 err | CP vol D50 err | CP recall |
+|---|---|---|---|---|---|---|---|---|---|
+| a | 0.200 / 0.200 | 0.223 | +11.6% / +11.5% | +19.1% / +11.4% | +11.3% | 0.80 | +19.4% | +3.4% | 0.86 |
+| b | 0.199 / 0.199 | 0.230 | +15.2% / +15.7% | +33.3% / +12.3% | +9.8% | 0.74 | +23.7% | -3.1% | 0.79 |
+| c | 0.201 / 0.200 | 0.215 | +7.3% / +7.4% | +10.4% / +12.0% | +11.0% | 0.89 | +13.6% | +11.4% | 0.95 |
+| d | 0.201 / 0.201 | 0.216 | +7.5% / +7.7% | +6.0% / +11.4% | +11.9% | 0.89 | +14.7% | +11.6% | 0.96 |
+| e | 0.242 / 0.241 | 0.264 | +9.1% / +9.1% | +15.1% / +11.1% | +12.5% | 0.77 | +14.9% | +4.3% | 0.82 |
+| f | 0.241 / 0.240 | 0.274 | +13.6% / +14.2% | +24.3% / +14.1% | +10.7% | 0.72 | +20.7% | -8.6% | 0.77 |
+| g | 0.254 / 0.254 | 0.289 | +13.7% / +14.1% | +40.1% / +11.1% | +11.5% | 0.74 | +15.3% | +5.1% | 0.79 |
+| h | 0.259 / 0.259 | 0.308 | +19.0% / +18.9% | +59.4% / +13.8% | +13.7% | 0.69 | +25.4% | +2.3% | 0.73 |
+
+- Means over 8 PSDs (|error| vs visible GT):
+
+| Method | num D50 | num D10 | num D90 | vol D50 | recall | precision | matched size ratio | s/img |
+|---|---|---|---|---|---|---|---|---|
+| watershed | 12.1% | 25.9% | 12.2% | 11.5% | 0.78 | 0.99 | 1.02 | 0.3 |
+| cellpose | 18.5% | 44.9% | 10.6% | 6.2% | 0.83 | 0.97 | 1.10 | 20 |
+| cellpose_ws | 18.1% | 46.1% | 10.4% | 6.9% | 0.84 | 0.97 | 1.10 | 14 |
+
+- Same-subset check (renders 1-16, all methods): watershed num D50 12.2%, vol D50 11.5%; cellpose 18.5% / 5.8%. Conclusions unchanged.
+- Ranking (Spearman ρ, 8 PSDs): number D50 0.76 vs visible (0.81 vs generating) for all methods; volume D50 1.00 (watershed), 0.98 (Cellpose); D90 1.00 for all. The D50 ρ < 1 is only within ties: PSDs a-d have identical true D50 (0.200) and e-h near-identical (0.24-0.26). Every method separates the two groups with no overlap (watershed: max a-d 0.230 < min e-h 0.264).
+- Bias: number D50 always reads high (+7 to +19%). Cause: overlapping spheres merge (small ones lost; recall 0.69-0.89) and 0-10% of visible spheres are below the 5 px ECD floor. Against resolvable GT (ECD >= 5 px) watershed D50 error drops to 8.0%. Matched particles are sized accurately by watershed (ratio 1.02); Cellpose masks are ~10% oversized on these ~11 px particles.
+- Decision: keep both. Watershed default (best number-weighted, 70x faster). Cellpose better for volume-weighted D50 on synthetic. No synthetic-derived correction factor applied (would not transfer to real images).
+
+## Block 6: Real-image check (DONE)
+- `src/real_check.py` -> `out/aa7075_vs_laser.csv`, `figures/fig4_aa7075_vs_reported.png`, overlays in `out/real/`.
+- Image -> laser mapping (inferred from morphology and size; dataset does not label Fig 2 panels in the files): 2a = base 7075; 2c = TiC surface-modified ("BM", compared to mean of 0.3/1.0/2.0 wt% BM); 2d = TiC volume-modified ("VM", mean of 0.3/1.0 wt% VM).
+- Added Miles-Lantuéjoul edge correction (`*_vol_ec`): edge-touching particles are excluded, which under-counts large ones; each kept particle weighted by frame area / area where it fits without touching the edge. Standard stereology, not tuned.
+- Volume-weighted, edge-corrected vs laser (µm):
+
+| Image | Method | n | D10 img / laser | D50 img / laser | D90 img / laser | D50 err |
+|---|---|---|---|---|---|---|
+| 2a base | watershed | 176 | 21.8 / 26.0 | 38.4 / 44.4 | 60.3 / 72.9 | -13.5% |
+| 2a base | cellpose | 200 | 18.5 / 26.0 | 33.7 / 44.4 | 53.9 / 72.9 | -24.1% |
+| 2c BM | watershed | 271 | 17.8 / 22.8 | 36.5 / 39.7 | 46.3 / 65.9 | -8.1% |
+| 2c BM | cellpose | 302 | 15.9 / 22.8 | 33.7 / 39.7 | 45.3 / 65.9 | -15.1% |
+| 2d VM | watershed | 29 | 43.7 / 44.9 | 53.3 / 71.4 | 69.3 / 118.6 | -25.4% |
+| 2d VM | cellpose | 22 | 40.8 / 44.9 | 55.2 / 71.4 | 70.0 / 118.6 | -22.8% |
+
+- Systematic bias: image under-reads laser, worst at D90 (-17 to -41%). Causes, in order of size:
+  1. Field of view. One 381 x 286 µm frame per powder. The image CDF ends at 60-70 µm; laser extends past 100 µm. 2d holds only 22-29 whole particles; large ones touch the border and are dropped. Edge correction recovers only a few %, since there are almost no large particles left to up-weight.
+  2. Laser diffraction reads high on non-spherical / agglomerated powder (equivalent-sphere model); the 1.0 VM sample has ~6% volume at 1-3 mm (agglomerates) that no 300x frame can contain.
+  3. Partly buried particles (2a background layer) read small; satellite clusters read as one (watershed).
+- Watershed is closer to laser than Cellpose on 2a and 2c; Cellpose masks are slightly tighter on real particles and split satellite clusters more, which lowers volume-weighted sizes.
+- Alloy 2: SKIPPED, `data/alloy2/` empty. 2c/2d (TiC-modified powders, different morphology: wrinkled skins, satellites) ran unchanged with no parameter tweaks as the closest substitute.
+- Failure examples in `figures/failures/`: (1) 2d watershed loses shaded flanks + edge loss of large spheres; (2) 2d Cellpose false-positive mask on substrate; (3) 2a watershed merges an agglomerate; (4) synthetic overlapping spheres merged.
+
+## Block 7: CLI tool (DONE)
+- `python analyze.py <folder|image> [--method watershed|cellpose|cellpose_ws] [--um-per-px X] [--scales csv] [--out dir]`. Writes results.csv, particles/, psd/, overlays/, scale_debug/, psd_all.png. Continues past unreadable files.
+- Default method: watershed (best synthetic D50, closer to laser on 2 of 3 real frames, ~1 s vs 15-60 s per image on CPU).
+- Bug found and fixed: even-sized morphology kernel left one data-bar row in the crop, which shielded bottom-edge particles from `clear_border` (185 vs 176 particles). Kernel now odd; data-bar and metadata versions of Fig 2a now give identical results.
+- `samples/`: Fig 2a TIFF (metadata scale) + same frame with a rendered data bar (OCR scale) + `expected/results.csv`.
+- Fresh clone + fresh venv + `pip install --only-binary=:all: -r requirements.txt` + `analyze.py samples`: results.csv matches expected exactly (timing column excluded). Gotcha found: install fails under a long path (Windows 260-char limit, torch headers). README says to keep the project at a short path.
+
+## Block 8: Figures + one-pager (DONE)
+- `figures/fig1_overlays.png` (raw | watershed | Cellpose; synthetic PSD e crop + AA7075 Fig 2a), `fig2_synthetic_psd.png` (CDFs, PSDs a/c/h), `fig3_d50_parity.png` (number and volume D50 parity, all PSDs, 3 methods), `fig4_aa7075_vs_reported.png` (image vs laser volume CDFs), `failures/` (4 annotated examples).
+- `ONE_PAGER.md`: accuracy tables first, inputs/outputs, limits, ask (20-30 CAMAL powder SEM images + laser PSD of the same lot if available).
+- Regenerate: `python -m src.validate_synthetic report`, `python -m src.real_check`, `python tests/make_fig1.py`, `python tests/make_failures.py`.

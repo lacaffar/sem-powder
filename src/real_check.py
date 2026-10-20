@@ -117,7 +117,8 @@ def main():
         ax.set_xlabel("diameter (µm)")
         ax.grid(alpha=0.3, which="both")
     axs[0].set_ylabel("cumulative volume fraction")
-    axs[0].legend(fontsize=6, loc="upper left")
+    for ax in axs:
+        ax.legend(fontsize=5.5, loc="upper left")
     fig.tight_layout()
     fig.savefig(figs / "fig4_aa7075_vs_reported.png", dpi=150)
     plt.close(fig)

@@ -204,37 +204,40 @@ def report(max_k=None, figures=True):
                 continue
             v = np.sort(cdfs[(L, key)])
             ls = "--" if key in ("generating", "visible") else "-"
-            lab = {"generating": "true (all, generating)", "visible": "true (visible)"}.get(key, key)
+            lab = {"generating": "true (all, generating; overlaps visible)", "visible": "true (visible)"}.get(key, key)
             ax.plot(v, np.arange(1, len(v) + 1) / len(v), ls, color=colors[key], label=lab, lw=1.5)
         name = res.loc[res.psd == L, "psd_name"].iloc[0]
         ax.set_title(f"PSD {name}", fontsize=9)
         ax.set_xlabel("diameter (Blender units)")
-        ax.set_xlim(0, np.percentile(cdfs[(L, "generating")], 99.5))
+        ax.set_xlim(0, max(np.percentile(v_, 99.5) for k_, v_ in cdfs.items() if k_[0] == L))
     axs[0].set_ylabel("cumulative number fraction")
     axs[0].legend(fontsize=7, loc="lower right")
     fig.tight_layout()
     fig.savefig(figs / "fig2_synthetic_psd.png", dpi=150)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(4.6, 4.4))
+    fig, axs = plt.subplots(1, 2, figsize=(9.2, 4.4))
     mk = {"watershed": "o", "cellpose": "s", "cellpose_ws": "^"}
-    lo = min(res.vis_D50.min(), res.meas_D50.min()) * 0.9
-    hi = max(res.vis_D50.max(), res.meas_D50.max()) * 1.1
-    for m in methods:
-        s = res[res.method == m]
-        ax.scatter(s.vis_D50, s.meas_D50, marker=mk[m], color=colors[m],
-                   label=f"{m} (mean |err| {np.mean(np.abs(s.err_vs_vis_D50)):.1%})")
-        for _, r in s.iterrows():
-            ax.annotate(r.psd, (r.vis_D50, r.meas_D50), fontsize=6, xytext=(2, 2), textcoords="offset points")
-    ax.plot([lo, hi], [lo, hi], "k--", lw=1)
-    ax.plot([lo, hi], [lo * 1.1, hi * 1.1], ":", color="0.6", lw=0.8)
-    ax.plot([lo, hi], [lo * 0.9, hi * 0.9], ":", color="0.6", lw=0.8)
-    ax.set_xlim(lo, hi)
-    ax.set_ylim(lo, hi)
-    ax.set_xlabel("true D50, visible particles (units)")
-    ax.set_ylabel("measured D50 (units)")
-    ax.set_title("Synthetic D50 parity (8 PSDs, 48 images each)", fontsize=9)
-    ax.legend(fontsize=7, loc="upper left")
+    for ax, (tcol, mcol, ecol, lbl) in zip(axs, [
+            ("vis_D50", "meas_D50", "err_vs_vis_D50", "number-weighted D50"),
+            ("vis_D50_vol", "meas_D50_vol", "err_vs_vis_D50_vol", "volume-weighted D50")]):
+        lo = min(res[tcol].min(), res[mcol].min()) * 0.9
+        hi = max(res[tcol].max(), res[mcol].max()) * 1.1
+        for m in methods:
+            s = res[res.method == m]
+            ax.scatter(s[tcol], s[mcol], marker=mk[m], color=colors[m],
+                       label=f"{m}, {int(s.n_images.median())} img/PSD (mean |err| {np.mean(np.abs(s[ecol])):.1%})")
+            for _, r in s.iterrows():
+                ax.annotate(r.psd, (r[tcol], r[mcol]), fontsize=6, xytext=(2, 2), textcoords="offset points")
+        ax.plot([lo, hi], [lo, hi], "k--", lw=1)
+        ax.plot([lo, hi], [lo * 1.1, hi * 1.1], ":", color="0.6", lw=0.8)
+        ax.plot([lo, hi], [lo * 0.9, hi * 0.9], ":", color="0.6", lw=0.8)
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+        ax.set_xlabel(f"true {lbl}, visible particles (units)")
+        ax.set_ylabel(f"measured {lbl} (units)")
+        ax.set_title(f"Synthetic {lbl} parity, 8 PSDs (dotted: +-10%)", fontsize=9)
+        ax.legend(fontsize=6.5, loc="upper left")
     fig.tight_layout()
     fig.savefig(figs / "fig3_d50_parity.png", dpi=150)
     plt.close(fig)

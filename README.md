@@ -8,7 +8,7 @@ python -m venv .venv; .venv\Scripts\Activate.ps1
 python -m pip install --only-binary=:all: -r requirements.txt
 python check_env.py   # prints "ok"; first run downloads Cellpose and EasyOCR models (~100 MB)
 ```
-(Linux/macOS: `source .venv/bin/activate`. On first run, if easyocr crashes with `UnicodeEncodeError`, set `PYTHONIOENCODING=utf-8`.)
+Keep the project at a short path (e.g. `C:\sem-powder`): torch has deeply nested files and pip fails with `OSError: [Errno 2]` past Windows' 260-character path limit unless long paths are enabled. (Linux/macOS: `source .venv/bin/activate`. On first run, if easyocr crashes with `UnicodeEncodeError`, set `PYTHONIOENCODING=utf-8`.)
 
 ## Run
 ```
@@ -62,7 +62,7 @@ See `ONE_PAGER.md` and `PROGRESS.md`. Synthetic renders with exact 3D ground tru
 ## Known limits
 - 2D projection: ECD of a sphere's silhouette equals its diameter, but partly hidden particles read small and overlapping particles merge (read large, small ones lost). Synthetic D50 reads ~8 to 20% high from this.
 - Resolution: particles under ~5 px ECD (20 px area) are dropped. Image at a magnification where the smallest particles of interest are > 10 px across.
-- Field of view: D90 needs many large particles. Frames with < 100 particles, or where large particles touch the edge, under-read D90 (AA7075 at 300x: D90 -17 to -41% vs laser). Use several fields or lower magnification.
+- Field of view: D90 needs many large particles. Frames with < 100 particles, or where large particles touch the edge, under-read D90 (AA7075 at 300x: D90 -17 to -42% vs laser). Use several fields or lower magnification.
 - Agglomerates and satellite clusters are measured as one particle (as laser diffraction also does).
 - Dark substrate assumed (particles brighter than background, SE/BSE on carbon tape). Bright or textured substrates break the foreground step.
 - Scale-bar OCR tested only on rendered Zeiss/FEI/JEOL-style data bars (max error 0.25%); real instrument bars vary. Always check `scale_debug/` or pass `--um-per-px`.
