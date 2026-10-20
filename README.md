@@ -65,7 +65,8 @@ See `ONE_PAGER.md` and `PROGRESS.md`. Synthetic renders with exact 3D ground tru
 - Field of view: D90 needs many large particles. Frames with < 100 particles, or where large particles touch the edge, under-read D90 (AA7075 at 300x: D90 -17 to -42% vs laser). Use several fields or lower magnification.
 - Agglomerates and satellite clusters are measured as one particle (as laser diffraction also does).
 - Dark substrate assumed (particles brighter than background, SE/BSE on carbon tape). Bright or textured substrates break the foreground step.
-- Scale-bar OCR tested only on rendered Zeiss/FEI/JEOL-style data bars (max error 0.25%); real instrument bars vary. Always check `scale_debug/` or pass `--um-per-px`.
+- Scale-bar OCR tested on one real instrument data bar (TESCAN Vega, -1.1% vs view field) and on rendered Zeiss/FEI/JEOL-style bars (max error 0.25%). Other fonts may misread. Always check `scale_debug/` or pass `--um-per-px`.
+- Clumps of fine particles are measured as one particle (Cu powder: D10 +41%).
 
 ## Layout
 `src/imio.py` loading, `src/scale.py` calibration, `src/segment.py` segmentation, `src/metrics.py` metrics, `src/synthetic_gt.py` + `src/validate_synthetic.py` synthetic validation, `src/real_check.py` AA7075 check, `tests/` checks and figure scripts.
@@ -73,3 +74,4 @@ See `ONE_PAGER.md` and `PROGRESS.md`. Synthetic renders with exact 3D ground tru
 ## Data credits
 - Synthetic: B. DeCost, E. Holm, Mendeley Data, doi:10.17632/tj4syyj9mr.1 (CC BY 4.0).
 - AA7075 + TiC: Mendeley Data 42gzbgk5hb v3 (CC BY 4.0). `samples/aa7075_fig2a.tif` is their Fig. 2a original; `samples/aa7075_fig2a_databar.png` is the same frame with a rendered data bar for testing the OCR path.
+- Ti-6Al-4V / Cu / blends: A. Strauch, M. L. Altmann, A. Tönjes (IWT Bremen), Zenodo doi:10.5281/zenodo.17037765 (CC BY-SA 4.0). Not redistributed here; `src/alloy2_check.py` expects `Particle_shape/*.tif` and `Table2_ParticleSizeDistribution.xlsx` in `data/alloy2/`.

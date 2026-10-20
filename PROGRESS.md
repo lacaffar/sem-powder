@@ -4,8 +4,8 @@
 1. All 8 blocks done. Demo: `python analyze.py samples --out out/demo` (watershed, ~1 s/image). One-pager: `ONE_PAGER.md`. Figures 1-4 + failures in `figures/`.
 2. Synthetic accuracy (exact 3D GT, 8 PSDs): watershed number D50 +12% (range +7 to +19%, always high), volume D50 +12%; Cellpose volume D50 6% abs. D90 ranks all 8 PSDs correctly (ρ = 1.0).
 3. Real AA7075 vs laser diffraction (volume, edge-corrected, watershed): D50 -14% (base), -8% (surface-mod TiC), -25% (volume-mod TiC, only 29 particles). D90 -17 to -42%: one 300x frame is too small a sample for D90.
-4. Skipped: Rettenberger model (needs Detectron2 compile, no compiler), second alloy (`data/alloy2/` empty), satellite fraction beyond a solidity proxy. Cellpose validated on 16 img/PSD, not 50 (CPU time).
-5. For you: drop Ti-6Al-4V / 316L images in `data/alloy2/` and run `python analyze.py data/alloy2` to cover the alloy-2 check. Keep the project at a short path on the lab PC (Windows path-length limit breaks the torch install).
+4. Alloy 2 (Ti-6Al-4V, public Zenodo set, TESCAN SEM, real data bar), unchanged settings: D50 +8%, D90 -1% vs reported PSD. First real scale bar broke OCR ("µm" read as "Hm"); fixed, now -1.1% vs the bar's view field.
+5. Skipped: Rettenberger model (needs Detectron2 compile, no compiler), satellite fraction beyond a solidity proxy, 316L (no public SEM + PSD set found). Cellpose validated on 16 img/PSD, not 50 (CPU time). Keep the project at a short path on the lab PC (Windows path-length limit breaks the torch install).
 
 ## Block 1: Env + data (DONE)
 - Python 3.13.2, torch 2.14.1+cpu (already present), cellpose 3.0.9, easyocr 1.7.2, skimage 0.26, opencv-python-headless 5.0. Pinned in `requirements.txt`.
@@ -31,7 +31,7 @@
 | 7075 0.3wt%TiC VM | 42.8 | 69.2 | 110.9 |
 | 7075 1.0wt%TiC VM | 47.1 | 73.7 | 126.4 |
 
-- `data/alloy2/` is empty. Second alloy will be skipped unless images are added.
+- `data/alloy2/` was empty; filled later from Zenodo 17037765 (see Alloy 2 at the end).
 
 ## Block 2: Scale calibration (DONE)
 - `src/scale.py`: data-bar detection (rows dominated by one flat value, touching top/bottom edge), scale bar = longest thin horizontal component after horizontal morphological opening, easyocr label nearest the bar, regex number+unit with OCR-confusion fixes (O->0, l->1, 'pum'/'pm' -> µm), merges split tokens ("0.1" + "mm"), ignores WD/HFW/EHT/Mag fields.
@@ -47,7 +47,7 @@
 | jeol_black_100um_small | 0.4963 | 0.4950 | -0.25% |
 | zeiss_black_0p1mm | 0.3722 | 0.3717 | -0.12% |
 
-- Limitation: OCR path not yet tested on a real instrument data bar (none in the available data). Debug images in `out/scale_debug/`.
+- Real instrument bar: tested later on TESCAN Vega (see Alloy 2 at the end). Debug images in `out/scale_debug/`.
 - Sanity check vs. PSD: a typical large particle in Fig 2a is ~130 px = 48 µm; reported D50 = 44 µm. Consistent.
 
 ## Block 3: Segmentation (DONE)
@@ -125,7 +125,7 @@
   2. Laser diffraction reads high on non-spherical / agglomerated powder (equivalent-sphere model); the 1.0 VM sample has ~6% volume at 1-3 mm (agglomerates) that no 300x frame can contain.
   3. Partly buried particles (2a background layer) read small; satellite clusters read as one (watershed).
 - Watershed is closer to laser than Cellpose on 2a and 2c; Cellpose masks are slightly tighter on real particles and split satellite clusters more, which lowers volume-weighted sizes.
-- Alloy 2: SKIPPED, `data/alloy2/` empty. 2c/2d (TiC-modified powders, different morphology: wrinkled skins, satellites) ran unchanged with no parameter tweaks as the closest substitute.
+- Alloy 2: done after hand-off, see Alloy 2 at the end. 2c/2d (TiC-modified) also ran unchanged.
 - Failure examples in `figures/failures/`: (1) 2d watershed loses shaded flanks + edge loss of large spheres; (2) 2d Cellpose false-positive mask on substrate; (3) 2a watershed merges an agglomerate; (4) synthetic overlapping spheres merged.
 
 ## Block 7: CLI tool (DONE)
@@ -139,3 +139,26 @@
 - `figures/fig1_overlays.png` (raw | watershed | Cellpose; synthetic PSD e crop + AA7075 Fig 2a), `fig2_synthetic_psd.png` (CDFs, PSDs a/c/h), `fig3_d50_parity.png` (number and volume D50 parity, all PSDs, 3 methods), `fig4_aa7075_vs_reported.png` (image vs laser volume CDFs), `failures/` (4 annotated examples).
 - `ONE_PAGER.md`: accuracy tables first, inputs/outputs, limits, ask (20-30 CAMAL powder SEM images + laser PSD of the same lot if available).
 - Regenerate: `python -m src.validate_synthetic report`, `python -m src.real_check`, `python tests/make_fig1.py`, `python tests/make_failures.py`.
+
+## Alloy 2: Ti-6Al-4V (DONE, after hand-off)
+- Search: no public 316L powder SEM + PSD dataset found (Zenodo/Mendeley API + web search; only paper figures). Ti-6Al-4V found: Zenodo 17037765 (Strauch, Altmann, Tönjes, IWT Bremen; CC BY-SA 4.0). Gas-atomized Ti-6Al-4V (LPW) plus Cu and Ti64+10/15/20 wt% Cu blends. One TESCAN Vega II SEM image each (BSE, 15 kV, 1024 x 864 with data bar) + PSD workbook (3 runs + mean, d10/d50/d90). Downloaded only `Particle_shape.zip` (3.5 MB) and `Particle_size_distribution.zip`. Not committed (data/ is gitignored; CC BY-SA).
+- PSD method not stated in the record. Log bins from 0.012 µm suggest laser diffraction; compared with volume-weighted, edge-corrected image stats.
+- Run 1, fully unchanged: data bar found and cropped (rows 768-864), scale bar found (187 px), but OCR read the label as "100 Hm". Every image left uncalibrated (px). First real instrument data bar the tool has seen.
+- Fix (general, not alloy-specific): unit regex accepts any 1-2 letters other than n/m before "m" as µm (SEM bars never use km/cm). Rendered-bar tests still pass (max 0.25%).
+- Scale after fix: 0.5348 µm/px on all 5 images vs 553.5 µm view field / 1024 px = 0.5405. Error -1.1% (measured bar 187 px vs expected 185; end ticks included).
+- Segmentation unchanged (no parameter edits). `src/alloy2_check.py` -> `out/alloy2_vs_reported.csv`, `figures/fig5_ti64_vs_reported.png`, overlays in `out/alloy2/`.
+
+| Image | Method | n | Image D10/D50/D90 (µm) | Reported | Error D10 / D50 / D90 |
+|---|---|---|---|---|---|
+| Ti-6Al-4V | watershed | 227 | 22.0 / 32.5 / 41.7 | 20.6 / 30.1 / 42.3 | +6.9% / +8.2% / -1.4% |
+| Ti-6Al-4V | cellpose | 289 | 22.7 / 34.1 / 43.8 | 20.6 / 30.1 / 42.3 | +10.5% / +13.5% / +3.6% |
+| Ti64+10Cu | watershed | 230 | 23.8 / 39.3 / 49.3 | 20.5 / 32.3 / 52.1 | +15.8% / +21.7% / -5.4% |
+| Ti64+15Cu | watershed | 238 | 21.8 / 34.6 / 40.3 | 20.5 / 31.2 / 46.0 | +6.5% / +11.0% / -12.4% |
+| Ti64+20Cu | watershed | 340 | 19.4 / 33.2 / 49.9 | 20.1 / 31.8 / 48.6 | -3.6% / +4.4% / +2.6% |
+| Cu | watershed | 578 | 20.8 / 39.9 / 47.7 | 14.7 / 34.4 / 48.7 | +41.4% / +15.8% / -2.0% |
+
+- Ti-6Al-4V within 8% at D50 and 1% at D90 with zero tuning. Opposite sign to AA7075 (which read low): these frames hold ~230 particles of ~56 px in a 553 µm field, so D90 is sampled well. Supports field of view as the main AA7075 error.
+- Bias left: image D50 reads high (+4 to +22%), as on synthetic. The -1.1% scale error would push true sizes ~1% higher still.
+- Cu: clumps of fines kept as one irregular particle and isolated fines < 5 px dropped: D10 +41%.
+- Failure examples added: `figures/failures/fail5_tescan_ocr_um_read_as_Hm.png`, `fail6_cu_fines_clusters.png`.
+- Possible next step: also parse "View field" / "HFW" from the data bar as a second scale source (field width / image width). Not done.

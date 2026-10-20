@@ -25,9 +25,18 @@ D50 reads high because overlapping particles merge and particles under 5 px are 
 | 7075 + TiC (surface mod.) | 271 | 36.5 / 39.7 | -8% | -30% |
 | 7075 + TiC (volume mod.) | 29 | 53.3 / 71.4 | -25% | -42% |
 
-The image under-reads laser because one 381 x 286 µm frame holds few large particles, and those touching the edge are dropped. Laser diffraction also reads high on agglomerates (one sample has 6% volume at 1 to 3 mm). Error grows as particle count falls. Fix: several fields per powder, at least 300 particles.
+**Real Ti-6Al-4V, unchanged settings** (gas-atomized, LPW; TESCAN Vega, BSE; Zenodo 17037765; scale read from the real data bar):
 
-**Scale bar reading:** 5 test data bars (Zeiss, FEI and JEOL styles; µm and mm labels): max error 0.25%. Zeiss and FEI TIFF metadata are read directly when present.
+| Powder | Particles | D10 / D50 / D90 image (µm) | Reported (µm) | Error D10 / D50 / D90 |
+|---|---|---|---|---|
+| Ti-6Al-4V (watershed) | 227 | 22.0 / 32.5 / 41.7 | 20.6 / 30.1 / 42.3 | +7% / +8% / -1% |
+| Ti-6Al-4V (Cellpose) | 289 | 22.7 / 34.1 / 43.8 | 20.6 / 30.1 / 42.3 | +10% / +14% / +4% |
+| Ti64 + 10/15/20% Cu blends | 230 to 340 | | | D50 +4 to +22% |
+| Cu (many fines) | 578 | 20.8 / 39.9 / 47.7 | 14.7 / 34.4 / 48.7 | +41% / +16% / -2% |
+
+On AA7075 the image under-reads laser because one 381 x 286 µm frame holds few large particles, and those touching the edge are dropped. Laser diffraction also reads high on agglomerates (one sample has 6% volume at 1 to 3 mm). Error grows as particle count falls. Fix: several fields per powder, at least 300 particles.
+
+**Scale bar reading:** real TESCAN data bar: -1.1% vs the bar's own view-field value (after one fix: OCR read "µm" as "Hm"). 5 rendered test bars (Zeiss, FEI and JEOL styles): max error 0.25%. Zeiss and FEI TIFF metadata are read directly when present.
 
 ## What it does
 `python analyze.py <folder>` on any folder of SEM images (TIF, PNG, JPG).
@@ -43,8 +52,9 @@ The image under-reads laser because one 381 x 286 µm frame holds few large part
 - **Field of view:** D90 needs many large particles. Few particles per frame gives a biased D90.
 - **Agglomerates and satellite clusters** are measured as one particle (watershed). Cellpose splits more.
 - **Background:** assumes particles brighter than the substrate (SE/BSE on carbon tape).
-- **Scale-bar OCR:** validated on rendered bars only. Check the scale debug image or pass `--um-per-px`.
-- **Not yet tested** on Ti-6Al-4V, 316L, or any CAMAL instrument.
+- **Scale-bar OCR:** tested on one real instrument (TESCAN) and rendered bars. Other fonts may misread. Check the scale debug image or pass `--um-per-px`.
+- **Fines:** clumps of fine particles are measured as one particle (Cu: D10 +41%).
+- **Not yet tested** on 316L or any CAMAL instrument. The reported PSD method for the Ti-6Al-4V set is not stated (assumed laser diffraction).
 
 ## Ask
 **20 to 30 SEM images of powder from any CAMAL run.** Any alloy, any magnification. No metadata needed; a visible scale bar or the original TIFF is enough. A laser-diffraction PSD for the same lot, if one exists, lets us report accuracy on CAMAL data.

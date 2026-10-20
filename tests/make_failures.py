@@ -61,6 +61,27 @@ def main():
         "overlapping spheres merged into one label -> missed",
         "small particles, D50 biased high (+19% on PSD h).",
     ], scale=3))
+    a2 = ROOT / "data/alloy2"
+    if (a2 / "Ti-6Al-4V.tif").exists():
+        from src.scale import detect_databar, find_scale_bar
+        img = load_gray(a2 / "Ti-6Al-4V.tif")
+        _, y0, y1 = detect_databar(img)
+        bar = find_scale_bar(img[y0:y1])
+        vis = cv2.cvtColor(img[y0 - 20:y1], cv2.COLOR_GRAY2BGR)
+        cv2.line(vis, (bar[0], 20 + bar[2]), (bar[1], 20 + bar[2]), (0, 0, 255), 2)
+        cv2.imwrite(str(OUT / "fail5_tescan_ocr_um_read_as_Hm.png"), caption(vis, [
+            "Real TESCAN data bar (Ti-6Al-4V, Zenodo 17037765): bar found (red, 187 px) but OCR read the label as '100 Hm'.",
+            "Before the fix every image in the set was left uncalibrated (sizes in px). Fixed: any 1-2 letters + 'm' (not n/m) = um.",
+            "Remaining scale error -1.1% vs 'View field: 553.5 um' (bar length includes the end ticks).",
+        ], scale=1))
+        img = load_gray(a2 / "Cu.tif")
+        lab, _ = segment(img[:768], "watershed")
+        ov = overlay(img[:768], lab)[0:330, 0:420]
+        cv2.imwrite(str(OUT / "fail6_cu_fines_clusters.png"), caption(ov, [
+            "Cu powder, watershed: clumps of fines kept as one",
+            "irregular particle; isolated fines < 5 px dropped.",
+            "D10 +41% vs reported PSD.",
+        ]))
     print("saved", sorted(p.name for p in OUT.glob("*.png")))
 
 

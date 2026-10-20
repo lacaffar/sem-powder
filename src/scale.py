@@ -26,8 +26,9 @@ import numpy as np
 from .imio import load_gray
 
 UNIT_TO_UM = {"nm": 1e-3, "um": 1.0, "µm": 1.0, "μm": 1.0, "mm": 1e3, "pm": 1e-6}
-# OCR often reads µ as u, p, y, or 'pu'; allow those for 'um'
-LABEL_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(nm|mm|[uµμpy]{1,2}m)(?![a-z])", re.IGNORECASE)
+# OCR misreads µ as u, p, y, H, 'pu', ...: any 1-2 letters other than n/m before
+# 'm' are taken as µ (SEM scale bars never use km/cm). Seen on a real TESCAN bar: 'Hm'.
+LABEL_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(nm|mm|[^\W\dnmNM_]{1,2}m)(?![a-z])", re.IGNORECASE)
 # data-bar fields that carry lengths but are not the scale bar label
 SKIP_RE = re.compile(r"(WD|HFW|VFW|FWD|HV|EHT|MAG|SPOT|DET|PRESS|KV|DATE|TIME)", re.IGNORECASE)
 
