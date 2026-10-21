@@ -21,11 +21,14 @@ That one command:
 
 Use the same command on every visit. It picks the stage itself:
 
-| Visit | What runs (unattended) | Time on a Quadro RTX 4000 (estimate) |
+| Visit | What runs (unattended) | Time (rehearsed on a 6 GB laptop GPU; Hunt similar) |
 |---|---|---|
-| 1 | GPU check; model shoot-out on synthetic images with exact masks; all real samples measured and compared with laser diffraction; draft outlines made for labeling | 1-3 h |
+| 1 | First time only: tools + Python + packages (~15-20 min). GPU check; model shoot-out on synthetic images with exact masks; all real samples measured and compared with laser diffraction; draft outlines for labeling | ~2-2.5 h |
 | (labeling) | You correct the draft outlines: `run.cmd label` (see [LABELING.md](LABELING.md)) | ~4-6 h total, any sittings |
-| 2 | Fine-tunes Cellpose-SAM on your corrections; scores every model on the held-out test crops; final measurements with the fine-tuned model | 1-2 h |
+| 2 | Fine-tunes Cellpose-SAM on your corrections (200 epochs; falls back to lighter settings if GPU memory runs out); scores every model on the held-out test crops; final measurements with the fine-tuned model | ~1-2 h |
+
+Keep the PowerShell window open and stay logged in while it runs (the program stops Windows from sleeping, but a
+logout ends it). If a visit-1 run is interrupted, running the command again resumes it.
 
 Afterwards, in `%USERPROFILE%\sem-powder`:
 

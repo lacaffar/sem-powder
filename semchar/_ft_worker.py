@@ -15,6 +15,7 @@ warnings.filterwarnings("ignore")
 
 def main(cfg_path):
     cfg = json.load(open(cfg_path))
+    import semchar.models  # noqa: F401  (sets CELLPOSE_LOCAL_MODELS_PATH before cellpose is imported)
     import torch
     from cellpose import models, train as cptrain
     from semchar.finetune import _freeze
@@ -25,6 +26,12 @@ def main(cfg_path):
         L.LABELS = Path(cfg["labels_dir"])
     tr_i, tr_m, _ = load_split("train")
     va_i, va_m, _ = load_split("val")
+    if torch.cuda.is_available():
+        # Recent NVIDIA Windows drivers spill to system RAM instead of failing when GPU memory runs out
+        # (sysmem fallback), making training crawl and the page file balloon. Cap PyTorch at the real VRAM
+        # so overflow becomes a clean OutOfMemoryError and the parent falls back to a lighter setting.
+        import os
+        torch.cuda.set_per_process_memory_fraction(float(os.environ.get("SEMCHAR_VRAM_FRACTION", 0.92)))
     m = models.CellposeModel(gpu=torch.cuda.is_available(), pretrained_model="cpsam_v2", use_bfloat16=False)
     _freeze(m.net, cfg["frozen"])
     n_train = sum(p.numel() for p in m.net.parameters() if p.requires_grad)
@@ -43,4 +50,11 @@ def main(cfg_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    try:
+        main(sys.argv[1])
+    except Exception as e:
+        import torch
+        if isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower():
+            print("[worker] out of GPU memory", flush=True)
+            sys.exit(3)
+        raise

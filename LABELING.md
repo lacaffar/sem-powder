@@ -40,8 +40,9 @@ The Cellpose window opens on the first crop not yet reviewed, with the draft out
 
 ## Order and time
 
-Train crops first (16), then val (8), then test (8). Expect ~5-15 minutes per crop. Visit 2 needs at least
-4 reviewed train crops, but the result is only as good as the labels: do all 32 if you can.
+`run.cmd label` opens them in this order: train (16, the 4 dense Cu crops last), then val (8), then test (8).
+Expect ~5-15 minutes per crop; the Cu crops have 200-330 particles each and take longer, so if time is short,
+skip those four. Visit 2 needs at least 4 reviewed train crops, but the result is only as good as the labels.
 Label the test crops as carefully as the others; they are the accuracy number you will quote.
 
 ## Your own images

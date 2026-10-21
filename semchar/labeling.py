@@ -7,8 +7,8 @@ image (more context than a crop), then cut into crops together with its flow fie
 
 Split by source image so no test image is seen in training:
   test  : AA7075_TiC_surface (Fig 2c), Ti64_15Cu   (same held-out images as attempt 1)
-  val   : AA7075_TiC_volume (Fig 2d), Cu
-  train : everything else
+  val   : AA7075_TiC_volume (Fig 2d), Ti64_20Cu
+  train : everything else (Cu crops are dense, ~200-330 particles each: label them last)
 User-added images (CAMAL) go to train unless named in configs/label_split.json.
 labels/manifest.json records each crop's source, box, split and draft hash; a crop
 counts as reviewed once its _seg.npy differs from the draft or is newer than it.
@@ -28,7 +28,7 @@ from .scale import calibrate
 
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ROOT / "labels"
-SPLIT = {"AA7075_TiC_surface": "test", "Ti64_15Cu": "test", "AA7075_TiC_volume": "val", "Cu": "val"}
+SPLIT = {"AA7075_TiC_surface": "test", "Ti64_15Cu": "test", "AA7075_TiC_volume": "val", "Ti64_20Cu": "val"}
 
 
 def _hash(p):
@@ -135,7 +135,8 @@ def open_gui():
         print("No drafts yet. Run visit 1 first.")
         return
     order = {"train": 0, "val": 1, "test": 2}
-    todo = st[~st.reviewed].assign(o=st.split.map(order)).sort_values(["o", "crop"])
+    todo = st[~st.reviewed].assign(o=st.split.map(order), cu=st.crop.str.startswith("Cu_"))
+    todo = todo.sort_values(["o", "cu", "crop"])
     done = int(st.reviewed.sum())
     print(f"Reviewed {done}/{len(st)} crops.")
     if not len(todo):
@@ -143,6 +144,7 @@ def open_gui():
         return
     first = todo.iloc[0]
     img = LABELS / first.split / f"{first.crop}.png"
-    print(f"Opening {img} ... fix outlines, Ctrl+S to save, then load the next image in the folder.")
+    print(f"Opening {img} ... fix outlines, Ctrl+S to save, then press D for the next crop.")
+    from . import models  # noqa: F401  (model cache location, in case the GUI's own segmentation is used)
     from cellpose.gui import gui
     gui.run(image=str(img))

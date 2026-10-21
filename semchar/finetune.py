@@ -54,9 +54,12 @@ def eval_masks(seg, imgs, masks, names):
     return rows
 
 
-def train(log=print, n_epochs=200, save_every=25, lr=1e-5, attempts=None):
+def train(log=print, n_epochs=None, save_every=None, lr=1e-5, attempts=None):
+    import os
     import subprocess
     import sys
+    n_epochs = n_epochs or int(os.environ.get("SEMCHAR_FT_EPOCHS", 200))        # env overrides: quick tests
+    save_every = save_every or int(os.environ.get("SEMCHAR_FT_SAVE_EVERY", 25))
     from . import labeling as L
     tr_i, tr_m, tr_n = load_split("train")
     va_i, va_m, va_n = load_split("val")
@@ -83,6 +86,10 @@ def train(log=print, n_epochs=200, save_every=25, lr=1e-5, attempts=None):
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                 errors="replace")
         oom = False
+        limit_s = float(os.environ.get("SEMCHAR_FT_TIMEOUT_H", 4)) * 3600   # watchdog per attempt
+        import threading
+        timer = threading.Timer(limit_s, proc.kill)
+        timer.start()
         for line in proc.stdout:
             line = line.rstrip()
             if "OOM" in line or "out of memory" in line.lower():
@@ -90,6 +97,10 @@ def train(log=print, n_epochs=200, save_every=25, lr=1e-5, attempts=None):
             if line and "%|" not in line:
                 log("    " + line[:200])
         proc.wait()
+        timed_out = not timer.is_alive() and proc.returncode != 0
+        timer.cancel()
+        if timed_out:
+            log(f"  attempt exceeded {limit_s / 3600:.1f} h and was stopped")
         res = Path(c["result"])
         if proc.returncode == 0 and res.exists():
             r = json.loads(res.read_text())
