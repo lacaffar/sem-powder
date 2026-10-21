@@ -1,104 +1,111 @@
-# SEM Powder Characterizer (attempt 2)
+# SEM Powder QC
 
-Particle size and shape statistics from SEM images of metal powder, built on Cellpose-SAM
-(a 2025 foundation segmentation model), fine-tuned on corrected SEM outlines, run in batches on a GPU.
-Attempt 1 (classical watershed + zero-shot Cellpose 3, CPU) is archived in [`attempt1/`](attempt1/ATTEMPT1.md).
+Measures sphericity and satellites in SEM images of metal AM powder, and tells you whether they changed between
+two batches (for example before and after an atomizer jet change). Runs on any Windows PC; a GPU makes it faster.
 
-## Powder QC: sphere fraction and satellites before/after a jet change
+## 1. Set up (once per computer, ~15-25 min)
 
-Models: Cellpose-SAM fine-tuned on AMPIS particle outlines (F1 0.93 on the published validation image; Cohn 2021
-Mask R-CNN: P 0.94, R 0.80) and Mask R-CNN for satellites (AMPIS + SALAS labels). Results in [PROGRESS.md](PROGRESS.md).
-
-On any Windows PC (Hunt, a VCL Windows reservation, a laptop), in Windows PowerShell, no admin needed:
+Open **Windows PowerShell** (no admin needed) and paste:
 
 ```
 irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex
 ```
 
-First time ~15-25 min: installs Python and packages into `%USERPROFILE%`, downloads the trained models (1.4 GB,
-[release `models-v1`](https://github.com/lacaffar/sem-powder/releases/tag/models-v1), checksum-verified). An NVIDIA
-GPU is used if present (~10 s per image); without one it runs on the CPU (~1.5 min per image on a 20-core laptop, longer on smaller machines). Then, in
-`%USERPROFILE%\sem-powder`:
+This installs everything into your user folder (`%USERPROFILE%\sem-powder`) and downloads the trained models
+(1.4 GB). Run the same line again later to update.
+
+## 2. Take the images
+
+- 5-10 random fields per batch (300+ particles per batch). Do not pick nice-looking areas.
+- Same magnification, detector (SE or BSE), kV and sample prep for every batch you compare.
+- A thin single layer of powder on carbon tape; heavy piles and overlaps reduce accuracy.
+- Save the original `.tif` from the SEM. Sizes come from the TIFF metadata or the scale bar; screenshots and
+  cropped JPEGs lose that (sizes then stay in pixels, sphericity and satellites still work).
+
+Put each batch in its own folder:
 
 ```
-.\run.cmd qc C:\path\to\images
-.\run.cmd compare C:\path\to\before C:\path\to\after
+C:\SEM\jet_old\   all "before" images
+C:\SEM\jet_new\   all "after" images
 ```
 
-`qc`: per sample (one subfolder per sample) % spherical (minor/major axis >= 0.90), median sphericity, % satellited
-particles, satellites per particle, D10/D50/D90, each with a 95% bootstrap CI (1000 resamples; whole images when a
-sample has 3 or more, else particles). `compare`: B - A for every metric with 95% CI, p-value and CHANGED / no
-detectable change. Use 5 or more images per condition at the same magnification so the CI covers field-to-field
-variation. The scale bar is read from the image; otherwise pass `--um-per-px`.
+## 3. Run
 
-Satellite accuracy: over the 8 published validation images the satellite count is unbiased (predicted / hand
-0.97, held-out F1 0.65), but the bias depends on the powder (+20% on AMPIS, -13% on SALAS images); on the AMPIS
-check image 30% of particles are flagged satellited vs 22% by hand. Treat absolute % satellited as approximate;
-before/after changes on the same powder, SEM and settings are what the tool measures well. Hand-count 2-3 of your
-own images once to check.
-
-Retraining (GPU, ~75 min): `$env:SEM_STAGE = "qcmodels"` before the one-liner. To publish a new model set, zip
-`qc_models.json`, `cp_particles`, `cp_particles.json`, `mrcnn_satellites.pt` from `models\`, attach it to a new
-release, and update `MODELS_URL` / `MODELS_SHA256` in `semchar/release.py`.
-
-## On the Hunt GPU PC (original size/shape workflow)
-
-Open **Windows PowerShell** and paste:
+In PowerShell:
 
 ```
-irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex
+cd $env:USERPROFILE\sem-powder
+.\run.cmd compare C:\SEM\jet_old C:\SEM\jet_new
 ```
 
-That one command:
-1. installs uv (Python manager) and portable Git into `%USERPROFILE%\sem-tools` (no admin, pinned versions, checksums verified);
-2. clones the repository into `%USERPROFILE%\sem-powder`, or updates it on later visits;
-3. installs Python 3.12, the CUDA build of PyTorch that matches the GPU driver, Cellpose 4 and the rest (first time ~10-20 min, ~6 GB);
-4. downloads the datasets (~600 MB, from Mendeley Data and Zenodo);
-5. runs the next stage and leaves results in `%USERPROFILE%\sem-powder\runs\`.
-
-Use the same command on every visit. It picks the stage itself:
-
-| Visit | What runs (unattended) | Time (rehearsed on a 6 GB laptop GPU; Hunt similar) |
-|---|---|---|
-| 1 | First time only: tools + Python + packages (~15-20 min). GPU check; model shoot-out on synthetic images with exact masks; all real samples measured and compared with laser diffraction; draft outlines for labeling | ~2-2.5 h |
-| (labeling) | You correct the draft outlines: `run.cmd label` (see [LABELING.md](LABELING.md)) | ~4-6 h total, any sittings |
-| 2 | Fine-tunes Cellpose-SAM on your corrections (200 epochs; falls back to lighter settings if GPU memory runs out); scores every model on the held-out test crops; final measurements with the fine-tuned model | ~1-2 h |
-
-Keep the PowerShell window open and stay logged in while it runs (the program stops Windows from sleeping, but a
-logout ends it). If a visit-1 run is interrupted, running the command again resumes it.
-
-Afterwards, in `%USERPROFILE%\sem-powder`:
+To measure batches without comparing, use one folder with one subfolder per batch:
 
 ```
-run.cmd analyze C:\path\to\images
+.\run.cmd qc C:\SEM\all_batches
 ```
 
-measures any folder of images (one subfolder per sample). The other commands are `run.cmd label`, `run.cmd status` and `run.cmd visit1` / `visit2`, or double-click `run.cmd` to run the next stage.
+Time per image: ~5-10 s with an NVIDIA GPU, ~1.5-3 min without one.
 
-**Bringing results back:** each run writes `runs\<stage>_<time>\` (open `index.html`) and a zip of it next to it. Copy the zip to OneDrive or a USB stick.
+## 4. Read the results
 
-## What it measures
+Results go to `runs\compare_<date-time>\` (or `runs\qc_...`), with a zip of the folder next to it.
 
-Per particle: ECD, area, perimeter, Feret max/min, circularity (4πA/P²), Feret aspect ratio, ellipse aspect ratio, roundness, convexity, solidity, number of touching particles, number of attached smaller ("satellite-like") particles.
+- `index.html`: the main table. For each metric: before, after, the difference with its 95% range, a p-value, and
+  **CHANGED** or **no detectable change**.
+- `overlays\`: every image with particle outlines and satellites circled in red. Flip through these to catch a bad
+  image or a bad outline.
+- CSV files with every particle, for your own plots.
 
-Per sample (all images of the sample pooled): count; D10/D50/D90 by number, by volume, and by volume with edge correction (compare this one with laser diffraction); D[4,3], D[3,2], span; median and P10/P90 of every shape descriptor; % spherical (circularity >= 0.90 and Feret ratio >= 0.80); % touching; % with satellite-like neighbours; warnings (uncalibrated scale, fewer than 300 particles).
-
-Scale per image: `--um-per-px` > `scales.csv` next to the images > SEM TIFF metadata (Zeiss, FEI) > scale-bar OCR > uncalibrated (flagged).
-
-## Models compared
-
-| Name | What it is |
+| Metric | Meaning |
 |---|---|
-| `watershed` | attempt 1's classical baseline (no learning) |
-| `cpsam` | Cellpose-SAM v2, zero-shot |
-| `cpsam_auto` | same, image rescaled so typical particles are 30-60 px |
-| `sam_amg` | Segment Anything ViT-L "segment everything" + particle filter |
-| `cpsam_ft` | Cellpose-SAM fine-tuned on corrected SEM outlines (visit 2) |
+| `pct_spherical` | % of particles with sphericity >= 0.90 (sphericity = short axis / long axis of the outline) |
+| `sphericity_median` | median sphericity |
+| `pct_satellited` | % of particles carrying at least one satellite |
+| `satellites_per_particle` | mean number of satellites per particle |
+| `D10_num`, `D50_num`, `D90_num` | particle size (equivalent circle diameter, µm) at 10/50/90% by count |
+| `D50_vol` | median size by volume |
 
-## Layout
+Particles cut by the image edge are left out. The 95% ranges come from resampling the images 1000 times, so they
+include field-to-field variation (with fewer than 3 images per batch, particles are resampled instead).
 
-`semchar/` package (`python -m semchar <stage>`), `scripts/setup_and_run.ps1` environment + runner, `hunt.ps1` bootstrap, `run.cmd` launcher, `configs/` small settings, `attempt1/` archive. Not in git: `data/`, `runs/`, `labels/`, `models/`, `cache/`, `.venv/`.
+## How accurate is it
 
-## Data credits
+Scored against published hand-labeled SEM powder images:
 
-AA7075 + TiC: Mendeley Data 42gzbgk5hb v3 (CC BY 4.0). Ti-6Al-4V / Cu: Strauch, Altmann, Tönjes (IWT Bremen), Zenodo 10.5281/zenodo.17037765 (CC BY-SA 4.0). Synthetic renders: DeCost & Holm, Mendeley Data 10.17632/tj4syyj9mr.1 (CC BY 4.0). Cellpose-SAM: Pachitariu, Rariden, Stringer (BSD-3). Segment Anything: Meta AI (Apache-2.0).
+| | Precision | Recall | Published method (Cohn 2021) |
+|---|---|---|---|
+| Particles (Cellpose-SAM, fine-tuned) | 0.94 | 0.93 | 0.94 / 0.80 |
+| Satellites (Mask R-CNN, tuned) | 0.67 | 0.64 | 0.69 / 0.55 |
+
+Particle outlines are reliable. Satellite counts are right on average, but their bias depends on the powder (±15-20%
+between datasets). **Trust before/after changes more than absolute % satellited.** Hand-count satellites on 2-3 of
+your own images once to check. The models were trained on public data (Ni superalloy, Al, IN718, 17-4 SS, Ti
+alloys), not yet on CAMAL images.
+
+## Problems
+
+| Problem | Fix |
+|---|---|
+| `run.cmd` not recognized | Type `.\run.cmd` and run it from `%USERPROFILE%\sem-powder` |
+| Sizes in px instead of µm | Scale not found: add `--um-per-px 0.25` (your value) to the command |
+| Red error text | Copy the last ~40 lines; full logs are in `runs\logs\` |
+| Scripts blocked by policy | Use the setup line from step 1; it does not need script permissions |
+
+## For developers
+
+- Details, decisions and all results: [PROGRESS.md](PROGRESS.md).
+- Retrain the models (NVIDIA GPU, ~75 min): `$env:SEM_STAGE = "qcmodels"`, then the setup line. Training data:
+  AMPIS and SALAS hand labels, downloaded automatically.
+- Publish a new model set: zip `qc_models.json`, `cp_particles`, `cp_particles.json`, `mrcnn_satellites.pt` from
+  `models\`, attach it to a new GitHub release, update `MODELS_URL` and `MODELS_SHA256` in `semchar/release.py`.
+- The earlier full size/shape workflow with your own labels: [docs/SIZE_SHAPE_WORKFLOW.md](docs/SIZE_SHAPE_WORKFLOW.md).
+  Attempt 1 is archived in [attempt1/](attempt1/ATTEMPT1.md).
+- Layout: `semchar/` Python package (`python -m semchar <stage>`), `hunt.ps1` setup, `run.cmd` launcher,
+  `scripts/setup_and_run.ps1` environment. Not in git: `data/`, `runs/`, `labels/`, `models/`, `cache/`, `.venv/`.
+
+## Credits
+
+Training data: AMPIS (Cohn et al. 2021, MIT) and SALAS (Price et al. 2021, MIT). Test images: AA7075 + TiC, Mendeley
+Data 42gzbgk5hb v3 (CC BY 4.0); Ti-6Al-4V / Cu, Strauch, Altmann, Tönjes, Zenodo 10.5281/zenodo.17037765
+(CC BY-SA 4.0); DeCost & Holm renders, Mendeley Data 10.17632/tj4syyj9mr.1 (CC BY 4.0). Models: Cellpose-SAM
+(Pachitariu, Rariden, Stringer; BSD-3), Mask R-CNN via torchvision (BSD-3), Segment Anything (Meta AI, Apache-2.0).

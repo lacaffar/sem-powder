@@ -76,6 +76,7 @@ if ($SetupOnly) { return }
 # ---- run (Python keeps its own full log in runs\logs\)
 Say "Running stage '$Stage' $Rest"
 Push-Location $Root
+$started = Get-Date
 try {
     & $Py -m semchar $Stage @Rest
     $code = $LASTEXITCODE
@@ -85,7 +86,7 @@ if ($code -ne 0) {
 } else {
     Write-Host "`n[setup] Stage '$Stage' finished." -ForegroundColor Green
     $latest = Join-Path $Root "runs\LATEST.txt"
-    if (Test-Path $latest) {
+    if ((Test-Path $latest) -and ((Get-Item $latest).LastWriteTime -ge $started)) {   # only results from this run
         $name = (Get-Content $latest -Raw).Trim()
         Write-Host "[setup] Results: $Root\runs\$name\index.html" -ForegroundColor Green
         Write-Host "[setup] To bring results back: copy $Root\runs\$name.zip (OneDrive / USB)." -ForegroundColor Green

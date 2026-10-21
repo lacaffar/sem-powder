@@ -13,7 +13,7 @@
   python -m semchar qc <folder>         sphericity + satellites per sample (subfolder = sample), with 95% CIs
   python -m semchar compare <before> <after>   is each QC metric different? (e.g. jet change)
   python -m semchar getmodels           download the trained QC models (GitHub Release) if missing
-  python -m semchar auto                get QC models (download, else train); else visit2 if labels reviewed
+  python -m semchar auto                get the QC models (download, else train) and print how to use them
 
 Results go to runs/<stage>_<timestamp>/ (SUMMARY.md, index.html, CSVs, overlays) and a zip of it.
 """
@@ -351,17 +351,7 @@ def auto(quick=False):
     if not ensure_models():
         print("Trained models could not be downloaded: training them here instead (~75 min on a GPU).")
         return qcmodels(quick)
-    if latest("visit1") is None:
-        print(QC_USAGE)
-        return
-    from .labeling import status
-    st = status()
-    tr = st[(st.split == "train") & st.reviewed] if len(st) else st
-    if len(tr) >= 4:
-        return visit2()
-    print("Visit 1 is done. Next step is labeling: run `run.cmd label` (or python -m semchar label),")
-    print("correct the draft outlines, save each with Ctrl+S, then run this again for visit 2.")
-    show_status()
+    print(QC_USAGE)   # the older size/shape workflow runs by explicit stage: visit1, label, visit2
 
 
 class _Tee:
