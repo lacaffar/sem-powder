@@ -133,9 +133,10 @@ def compare(bs_a, bs_b, m_a, m_b):
 
 def load_qc_models():
     from .models import ROOT, make
+    from .release import ensure_models
     cfg_p = ROOT / "models" / "qc_models.json"
-    if not cfg_p.exists():
-        raise FileNotFoundError("models/qc_models.json missing: run the 'qcmodels' stage first")
+    if not ensure_models():
+        raise FileNotFoundError("QC models missing and download failed: run the 'getmodels' or 'qcmodels' stage")
     cfg = json.loads(cfg_p.read_text())
     return _load(cfg["particles"]), _load(cfg["satellites"], satellites=True), cfg
 

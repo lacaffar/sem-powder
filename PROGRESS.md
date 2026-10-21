@@ -42,6 +42,19 @@ labeled SEM powder data (AMPIS Ni superalloy, SALAS 5 alloys), scored on the pub
 - Overlays checked by eye: particle outlines tight on Ti64 and AA7075; satellites miss some small bumps on Ti64 and
   flag a few dark fines in AA7075.
 
+## Shared models (release `models-v1`, 2026-10-21)
+- `sem_models.zip` (1.40 GB, SHA-256 41cd8035...): cp_particles + mrcnn_satellites from Hunt run 1 and
+  qc_models.json. The one-liner (default stage `auto`) downloads it, so any Windows PC (Hunt, VCL, laptops) can run
+  qc / compare without training; training runs only if the download fails.
+- Satellite tuning of the Hunt model (run on the dev laptop; it reproduces Hunt's default scores exactly):
+  default scale 1.5625 / score >= 0.5: P 0.597 R 0.745 F1 0.662, count ratio 1.25. Tuned (leave-one-image-out):
+  P 0.665 R 0.643 F1 0.653, count ratio 0.97 (AMPIS 1.20, SALAS 0.87). Final setting on all 8: scale 2.0,
+  score >= 0.8. Check image: 30.4% -> 29.8% satellited (hand 21.9%), 0.61 -> 0.54 satellites per particle.
+- Selection rule for satellites changed: among models within 0.02 F1 of the best, the count ratio closest to 1
+  wins (QC reports counts).
+- Laptop check with the released models: compare Ti-6Al-4V vs Ti64+15/20Cu reproduces Hunt per-image numbers;
+  GPU ~5 s per image, CPU only ~85 s per image (20 cores).
+
 ## Decisions
 - Engine: Cellpose-SAM `cpsam_v2` (cellpose 4.2.1.1). Reasons: best-reported generalist instance segmenter in 2025-26
   benchmarks, size/noise robust, built-in fine-tuning and GUI for corrections. Zero-shot test on AA7075 showed whole

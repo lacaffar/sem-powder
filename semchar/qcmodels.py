@@ -216,7 +216,14 @@ def run(run_dir, log=print, quick=False):
     for task in ("particles", "satellites"):
         b = bench[(bench.task == task) & (bench.subset == "all")] if len(bench) else bench
         b = b[b.model.isin(trained)] if task == "particles" else b   # QC needs a trained particle model
-        if len(b):
+        if len(b) and task == "satellites":
+            # QC reports satellite counts, so count bias matters: among models within 0.02 F1 of the
+            # best, take the one whose predicted count is closest to the hand count
+            near = b[b["F1@0.5"] >= b["F1@0.5"].max() - 0.02]
+            best = near.loc[(np.log(near.count_ratio.clip(lower=1e-3))).abs().idxmin(), "model"]
+            choice[task] = trained[best]
+            log(f"  best {task} model: {best}")
+        elif len(b):
             best = b.sort_values("F1@0.5", ascending=False).iloc[0]["model"]
             choice[task] = trained[best]
             log(f"  best {task} model: {best}")

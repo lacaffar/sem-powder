@@ -9,14 +9,15 @@ Attempt 1 (classical watershed + zero-shot Cellpose 3, CPU) is archived in [`att
 Models: Cellpose-SAM fine-tuned on AMPIS particle outlines (F1 0.93 on the published validation image; Cohn 2021
 Mask R-CNN: P 0.94, R 0.80) and Mask R-CNN for satellites (AMPIS + SALAS labels). Results in [PROGRESS.md](PROGRESS.md).
 
-On the Hunt PC, in Windows PowerShell:
+On any Windows PC (Hunt, a VCL Windows reservation, a laptop), in Windows PowerShell, no admin needed:
 
 ```
-$env:SEM_STAGE = "qcmodels"
 irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex
 ```
 
-trains (first time, ~75 min; reused afterwards, `SEMCHAR_RETRAIN=1` retrains) and benchmarks the models. Then, in
+First time ~15-25 min: installs Python and packages into `%USERPROFILE%`, downloads the trained models (1.4 GB,
+[release `models-v1`](https://github.com/lacaffar/sem-powder/releases/tag/models-v1), checksum-verified). An NVIDIA
+GPU is used if present (~10 s per image); without one it runs on the CPU (~1.5 min per image on a 20-core laptop, longer on smaller machines). Then, in
 `%USERPROFILE%\sem-powder`:
 
 ```
@@ -29,6 +30,16 @@ particles, satellites per particle, D10/D50/D90, each with a 95% bootstrap CI (1
 sample has 3 or more, else particles). `compare`: B - A for every metric with 95% CI, p-value and CHANGED / no
 detectable change. Use 5 or more images per condition at the same magnification so the CI covers field-to-field
 variation. The scale bar is read from the image; otherwise pass `--um-per-px`.
+
+Satellite accuracy: over the 8 published validation images the satellite count is unbiased (predicted / hand
+0.97, held-out F1 0.65), but the bias depends on the powder (+20% on AMPIS, -13% on SALAS images); on the AMPIS
+check image 30% of particles are flagged satellited vs 22% by hand. Treat absolute % satellited as approximate;
+before/after changes on the same powder, SEM and settings are what the tool measures well. Hand-count 2-3 of your
+own images once to check.
+
+Retraining (GPU, ~75 min): `$env:SEM_STAGE = "qcmodels"` before the one-liner. To publish a new model set, zip
+`qc_models.json`, `cp_particles`, `cp_particles.json`, `mrcnn_satellites.pt` from `models\`, attach it to a new
+release, and update `MODELS_URL` / `MODELS_SHA256` in `semchar/release.py`.
 
 ## On the Hunt GPU PC (original size/shape workflow)
 

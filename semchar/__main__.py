@@ -12,7 +12,8 @@
                                         pick the best, run QC on the real samples
   python -m semchar qc <folder>         sphericity + satellites per sample (subfolder = sample), with 95% CIs
   python -m semchar compare <before> <after>   is each QC metric different? (e.g. jet change)
-  python -m semchar auto                qcmodels if not done; else visit2 if labels reviewed; else status
+  python -m semchar getmodels           download the trained QC models (GitHub Release) if missing
+  python -m semchar auto                get QC models (download, else train); else visit2 if labels reviewed
 
 Results go to runs/<stage>_<timestamp>/ (SUMMARY.md, index.html, CSVs, overlays) and a zip of it.
 """
@@ -338,11 +339,20 @@ def show_status():
     return st
 
 
+QC_USAGE = r"""
+QC models are ready. In PowerShell, from %USERPROFILE%\sem-powder:
+  .\run.cmd qc C:\path\to\images                    (one subfolder per sample)
+  .\run.cmd compare C:\path\to\before C:\path\to\after
+Results: runs\qc_<time>\ or runs\compare_<time>\ (index.html, CSVs, overlays)."""
+
+
 def auto(quick=False):
-    if not (ROOT / "models" / "qc_models.json").exists():
+    from .release import ensure_models
+    if not ensure_models():
+        print("Trained models could not be downloaded: training them here instead (~75 min on a GPU).")
         return qcmodels(quick)
     if latest("visit1") is None:
-        print("QC models are trained. Use: run.cmd qc <folder>   or   run.cmd compare <before> <after>")
+        print(QC_USAGE)
         return
     from .labeling import status
     st = status()
@@ -382,7 +392,7 @@ def _session_log(stage):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", choices=["envcheck", "data", "visit1", "drafts", "label", "status", "visit2", "analyze", "auto",
-                                     "qcmodels", "qc", "compare"])
+                                     "qcmodels", "qc", "compare", "getmodels"])
     ap.add_argument("input", nargs="?")
     ap.add_argument("input2", nargs="?")
     ap.add_argument("--quick", action="store_true")
@@ -431,6 +441,11 @@ def _dispatch(a):
         auto(a.quick)
     elif a.stage == "qcmodels":
         qcmodels(a.quick)
+    elif a.stage == "getmodels":
+        from .release import ensure_models
+        if not ensure_models():
+            sys.exit(1)
+        print(QC_USAGE)
     elif a.stage == "qc":
         if not a.input:
             sys.exit("usage: python -m semchar qc <folder>")

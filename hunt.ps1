@@ -1,12 +1,12 @@
-# One command on the Hunt GPU PC (PowerShell, no admin):
+# One command on any Windows PC (PowerShell, no admin; NVIDIA GPU used if present):
 #
 #   irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex
 #
 # 1. installs uv (Python manager) and portable Git into %USERPROFILE%\sem-tools (pinned, hash-checked)
 # 2. clones or updates the repository into %USERPROFILE%\sem-powder
-# 3. sets up Python + CUDA PyTorch + packages, downloads the data
-# 4. runs the next stage automatically: visit 1 first time, visit 2 once labels are reviewed
-# To force a stage, first run e.g.:  $env:SEM_STAGE = "visit1"   (visit2, label, status, data, envcheck)
+# 3. sets up Python + PyTorch (CUDA build matching the driver, else CPU) + packages
+# 4. downloads the trained QC models (GitHub Release, checksum-verified) and prints how to run qc / compare
+# To force a stage, first run e.g.:  $env:SEM_STAGE = "qcmodels"   (getmodels, envcheck, visit1, visit2, label, status)
 
 & {
     $ErrorActionPreference = "Stop"
