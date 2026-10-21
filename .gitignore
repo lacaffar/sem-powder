@@ -2,5 +2,10 @@
 .venv-rett/
 data/
 out/
+runs/
+labels/
+models/
+cache/
 __pycache__/
 *.pyc
+*.code-workspace

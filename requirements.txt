@@ -1,0 +1,24 @@
+# Installed by scripts/setup_and_run.ps1 with uv into .venv (Python 3.12).
+# torch/torchvision are installed separately with the right CUDA build for the GPU driver:
+#   driver >= 528.33 : torch 2.14.1 + torchvision 0.29.1 (CUDA 12.6 wheels)
+#   driver >= 452.39 : torch 2.7.1  + torchvision 0.22.1 (CUDA 11.8 wheels)
+#   no NVIDIA GPU    : torch 2.14.1 + torchvision 0.29.1 (CPU wheels)
+cellpose[gui]==4.2.1.1
+segment-anything==1.0
+easyocr==1.7.2
+numpy==2.5.2
+scipy==1.18.1
+scikit-image==0.26.0
+opencv-python-headless==5.0.0.93
+pandas==3.0.6
+matplotlib==3.11.2
+tifffile==2026.10.15
+imagecodecs==2026.10.10
+openpyxl==3.1.5
+fastremap==1.21.0
+fill-voids==2.1.2
+natsort==8.4.0
+pyqt6==6.11.0
+pyqtgraph==0.14.0
+qtpy==2.4.3
+superqt==0.9.0
