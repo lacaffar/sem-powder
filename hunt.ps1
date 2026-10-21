@@ -51,6 +51,7 @@
         if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
     }
 
+    if ($env:SEM_NO_SETUP) { Write-Host "[hunt] SEM_NO_SETUP set: stopping before setup"; return }
     $setup = Join-Path $SemRoot "scripts\setup_and_run.ps1"
     & ([scriptblock]::Create([IO.File]::ReadAllText($setup))) -RootDir $SemRoot -Stage $SemStage
 }
