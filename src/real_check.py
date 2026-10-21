@@ -66,7 +66,7 @@ def main():
     for fn, (desc, refs) in IMAGES.items():
         p = AA / fn
         for m in methods:
-            df, s, lab, img, sc = analyze_image(p, m)
+            df, s, lab, img, sc, _ = analyze_image(p, m)
             df.to_csv(out / f"{p.stem}__{m}.csv", index=False)
             cv2.imwrite(str(out / f"{p.stem}__{m}.png"), overlay(img, lab, title=f"{fn[-6:-4]} {m} n={s['count']}"))
             curves[(fn, m)] = df

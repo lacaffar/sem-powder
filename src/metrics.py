@@ -85,8 +85,27 @@ def summarize(df: pd.DataFrame, um_per_px: float | None) -> dict:
     return out
 
 
-def analyze_image(path, method="watershed", um_per_px=None, sidecar=None, scale_debug=None):
-    """Returns (particles_df, summary_dict, labels, cropped_img, scale_result)."""
+SAT_HOST_MIN_ECD_PX = 10  # smallest particle that can host a detectable satellite (2 x 2.5 x 2 px)
+
+
+def add_satellites(df, summ, sats, um_per_px):
+    """Attach satellite results to the particle table and image summary."""
+    counts = sats["parent"].value_counts() if len(sats) else {}
+    df["n_satellites"] = [int(counts.get(i, 0)) for i in df["id"]]
+    hosts = df[df.ecd_px >= SAT_HOST_MIN_ECD_PX]
+    summ["satellite_count"] = int(len(sats))
+    summ["satellites_per_particle"] = float(len(sats) / len(hosts)) if len(hosts) else np.nan
+    summ["frac_with_satellites"] = float((hosts.n_satellites > 0).mean()) if len(hosts) else np.nan
+    if len(sats):
+        d = 2 * sats["r_px"].to_numpy()
+        summ["satellite_D50"] = float(np.median(d * um_per_px if um_per_px else d))
+    else:
+        summ["satellite_D50"] = np.nan
+    return df, summ
+
+
+def analyze_image(path, method="watershed", um_per_px=None, sidecar=None, scale_debug=None, satellites=True):
+    """Returns (particles_df, summary_dict, labels, cropped_img, scale_result, satellites_df)."""
     img = load_gray(path)
     sc = calibrate(path, img=img, um_per_px=um_per_px, sidecar=sidecar, debug_path=scale_debug)
     y0, y1, x0, x1 = sc.crop_box
@@ -94,9 +113,16 @@ def analyze_image(path, method="watershed", um_per_px=None, sidecar=None, scale_
     labels, info = segment(img, method)
     df = particle_table(labels, sc.um_per_px)
     summ = summarize(df, sc.um_per_px)
+    sats = None
+    if satellites:
+        from .satellites import detect
+        sats = detect(img, labels, "model")
+        if sc.um_per_px and len(sats):
+            sats["d_um"] = 2 * sats["r_px"] * sc.um_per_px
+        df, summ = add_satellites(df, summ, sats, sc.um_per_px)
     summ.update({"image": Path(path).name, "method": method, "scale_source": sc.source,
                  "scale_confidence": round(sc.confidence, 3), "seconds": info.get("seconds")})
-    return df, summ, labels, img, sc
+    return df, summ, labels, img, sc, sats
 
 
 def plot_psd(df_or_list, out, unit="um", labels=None, title=None):

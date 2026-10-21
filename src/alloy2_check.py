@@ -62,7 +62,7 @@ def main():
         for m in methods:
             if m != "watershed" and fn != "Ti-6Al-4V.tif":
                 continue  # Cellpose only on the alloy itself (CPU time)
-            df, s, lab, img, sc = analyze_image(A2 / fn, m)
+            df, s, lab, img, sc, _ = analyze_image(A2 / fn, m)
             cv2.imwrite(str(out / f"{Path(fn).stem}__{m}.png"), overlay(img, lab, title=f"{fn} {m} n={s['count']}"))
             curves[(fn, m)] = df
             r = ref[sheet]

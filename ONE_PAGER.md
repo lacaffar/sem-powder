@@ -36,6 +36,14 @@ D50 reads high because overlapping particles merge and particles under 5 px are 
 
 On AA7075 the image under-reads laser because one 381 x 286 µm frame holds few large particles, and those touching the edge are dropped. Laser diffraction also reads high on agglomerates (one sample has 6% volume at 1 to 3 mm). Error grows as particle count falls. Fix: several fields per powder, at least 300 particles.
 
+**Satellites** (small particles fused to larger ones; counted per particle and per image):
+
+| Held-out test | Before | Now |
+|---|---|---|
+| Real crops, AA7075 Fig 2c + Ti64+15Cu (36 hand-labelled) | not detected | F1 0.48; 35 found vs 36 labelled |
+| Synthetic renders (1,508 satellites) | not detected | F1 0.67 (precision 0.82, recall 0.57) |
+| Share of particles with satellites (synthetic) | 67 pts off | 11 pts off |
+
 **Scale bar reading:** real TESCAN data bar: -1.1% vs the bar's own view-field value (after one fix: OCR read "µm" as "Hm"). 5 rendered test bars (Zeiss, FEI and JEOL styles): max error 0.25%. Zeiss and FEI TIFF metadata are read directly when present.
 
 ## What it does
@@ -43,7 +51,7 @@ On AA7075 the image under-reads laser because one 381 x 286 µm frame holds few 
 1. Scale: µm/px from SEM TIFF metadata or OCR of the scale bar, or a CSV or command-line value. If none is found, results are reported in px and flagged.
 2. Crops the data bar, then segments particles (watershed or Cellpose). No alloy-specific settings.
 3. Per particle: ECD, area, perimeter, circularity, aspect ratio, solidity.
-4. Per image: count, D10/D50/D90 (number- and volume-weighted, plus volume edge-corrected), mean shape metrics, fraction of irregular particles (satellites or agglomerates).
+4. Per image: count, D10/D50/D90 (number- and volume-weighted, plus volume edge-corrected), mean shape metrics, satellite count, satellites per particle, share of particles carrying satellites.
 5. Outputs: `results.csv`, per-particle CSVs, PSD plots, segmentation overlays, scale-bar debug images.
 
 ## Known limits
@@ -54,6 +62,7 @@ On AA7075 the image under-reads laser because one 381 x 286 µm frame holds few 
 - **Background:** assumes particles brighter than the substrate (SE/BSE on carbon tape).
 - **Scale-bar OCR:** tested on one real instrument (TESCAN) and rendered bars. Other fonts may misread. Check the scale debug image or pass `--um-per-px`.
 - **Fines:** clumps of fine particles are measured as one particle (Cu: D10 +41%).
+- **Satellites:** roughly half of detections and half of satellites right on real images; weakest on irregular powder. Real labels are one annotator's, 83 satellites.
 - **Not yet tested** on 316L or any CAMAL instrument. The reported PSD method for the Ti-6Al-4V set is not stated (assumed laser diffraction).
 
 ## Ask

@@ -5,7 +5,7 @@
 2. Synthetic accuracy (exact 3D GT, 8 PSDs): watershed number D50 +12% (range +7 to +19%, always high), volume D50 +12%; Cellpose volume D50 6% abs. D90 ranks all 8 PSDs correctly (ρ = 1.0).
 3. Real AA7075 vs laser diffraction (volume, edge-corrected, watershed): D50 -14% (base), -8% (surface-mod TiC), -25% (volume-mod TiC, only 29 particles). D90 -17 to -42%: one 300x frame is too small a sample for D90.
 4. Alloy 2 (Ti-6Al-4V, public Zenodo set, TESCAN SEM, real data bar), unchanged settings: D50 +8%, D90 -1% vs reported PSD. First real scale bar broke OCR ("µm" read as "Hm"); fixed, now -1.1% vs the bar's view field.
-5. Skipped: Rettenberger model (needs Detectron2 compile, no compiler), satellite fraction beyond a solidity proxy, 316L (no public SEM + PSD set found). Cellpose validated on 16 img/PSD, not 50 (CPU time). Keep the project at a short path on the lab PC (Windows path-length limit breaks the torch install).
+5. Satellites: new detector, held-out real F1 0.48 (was 0: not detected), synthetic F1 0.67, share-with-satellites error 67 -> 11 pts. Skipped: Rettenberger model (needs Detectron2 compile, no compiler), 316L (no public SEM + PSD set found). Cellpose validated on 16 img/PSD, not 50 (CPU time). Keep the project at a short path on the lab PC (Windows path-length limit breaks the torch install).
 
 ## Block 1: Env + data (DONE)
 - Python 3.13.2, torch 2.14.1+cpu (already present), cellpose 3.0.9, easyocr 1.7.2, skimage 0.26, opencv-python-headless 5.0. Pinned in `requirements.txt`.
@@ -162,3 +162,24 @@
 - Cu: clumps of fines kept as one irregular particle and isolated fines < 5 px dropped: D10 +41%.
 - Failure examples added: `figures/failures/fail5_tescan_ocr_um_read_as_Hm.png`, `fail6_cu_fines_clusters.png`.
 - Possible next step: also parse "View field" / "HFW" from the data bar as a second scale source (field width / image width). Not done.
+
+## Satellites (DONE, after hand-off)
+- Before: no satellite detection. Only `irregular_frac` (solidity < 0.90). Watershed deliberately merges bonded satellites into the parent (right for the size distribution, wrong for satellite counting).
+- Benchmark 1, synthetic (`src/synth_satellites.py`, 60 renders, `data/synth_sat/`, regenerable): orthographic z-buffer scenes of parent spheres on a substrate, satellites fused on the visible hemisphere incl. rims (r = 0.06-0.35 R, 20-80% embedded), free fines as negatives, SE- and BSE-like shading with randomised lighting/texture/noise. Seeds 0-29 tune, 30-59 test. GT = satellites >= 40% visible, r >= 2 px, on parents not cut by the frame (the tool drops those parents; 21% of satellites sit on them, reported separately as recall_all_gt).
+- Benchmark 2, real (`tests/satellite_labels_real.json`): 8 fixed crops (positions chosen before looking), 4 images. Dev: AA7075 Fig 2a, Ti-6Al-4V (47 satellites). Test: AA7075 Fig 2c, Ti64+15Cu (36). Labelled by eye on 3x gridded crops by Claude; satellite = r <= ~0.3 host; 0.3-0.4 and dense agglomerates are ignore boxes. Tolerance max(4 px, r).
+- Detector (`src/satellites.py`, method `model`): LoG blob candidates on a white top-hat image + the plain image (merged), restricted to particles (or within r of one), host radius >= 2.5 x blob radius; satellites split off by segmentation re-attached to the largest touching particle if <= 0.3 x its radius. 11 features per candidate; logistic regression (numpy, class-balanced, real rows x5) fit on synthetic tune + real dev; cut-off chosen on real dev (p = 0.97). `src/train_satellites.py`, coefficients `src/satellite_model.json`.
+- Iterations (F1): blob threshold only 0.24-0.51 (synthetic tune) -> logistic on top-hat candidates 0.64 (synthetic tune) / 0.51 (real dev) -> + measurable-parent GT, split-off re-attachment 0.72 synthetic test -> + real dev training, host-centre feature 0.62 real dev -> + plain-image candidates, own-size rule for split-off particles 0.65 real dev.
+- Held-out results:
+
+| Test set | Before (solidity proxy) | Segmentation split only | Satellite detector |
+|---|---|---|---|
+| Real test crops (36) | F1 0.00 | F1 0.20 (P 0.33, R 0.14) | F1 0.48 (P 0.49, R 0.47), 35 found vs 36 |
+| Synthetic test (1,508) | F1 0.00 | F1 0.04 | F1 0.67 (P 0.82, R 0.57), count 0.72x |
+| Share of particles with satellites, synthetic test | 67 pts off | 62 pts off | 11 pts off |
+
+- Trade-off: a synthetic-only model scored better on synthetic test (F1 0.72, count 0.99x, share error 5 pts) but worse on real dev (0.51). Kept the real-tuned model; real images are the target.
+- By image (real test): Ti64+15Cu good (12 of 22 found, 12 of 17 detections right); TiC-modified AA7075 Fig 2c weak (5 of 14 found). Dev F1 kept rising (0.62 -> 0.65) while test stayed flat (0.474 -> 0.479): stopped tuning there to avoid fitting the labels.
+- Real-image caveats: 83 labels from one non-expert annotator; ambiguity between a fused satellite and a small particle merely touching a larger one in 2D; test set is small (F1 uncertainty roughly +-0.1).
+- Tool: on by default (~8 s/image), `--no-satellites` to skip. New outputs: `satellites/<image>.csv`; columns `satellite_count`, `satellites_per_particle`, `frac_with_satellites`, `satellite_D50` (results.csv) and `n_satellites` (particles). Size distribution unchanged. `figures/fig6_satellites.png`.
+- Fig 2a: 122 satellites, 37% of particles carry one. Ti-6Al-4V: 94, 28%.
+- Next levers if more accuracy is needed: more real labels (ideally by a metallographer, on CAMAL images), Cellpose host masks, or a small CNN trained on the synthetic renders + real labels.

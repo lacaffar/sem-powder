@@ -7,7 +7,8 @@ Outputs in --out:
   results.csv            one row per image (count, D10/D50/D90, shape means, scale source)
   particles/<image>.csv  one row per particle
   psd/<image>.png        histogram + number/volume CDF
-  overlays/<image>.png   segmentation overlay
+  overlays/<image>.png   segmentation overlay (satellites as red circles)
+  satellites/<image>.csv one row per detected satellite
   scale_debug/<image>.png detected data bar / scale bar / OCR label
   psd_all.png            combined CDFs across images
 """
@@ -34,7 +35,8 @@ sys.path.insert(0, str(ROOT))
 COLS = ["image", "method", "count", "size_unit", "um_per_px", "scale_source", "scale_confidence",
         "D10_num", "D50_num", "D90_num", "D10_vol", "D50_vol", "D90_vol",
         "D10_vol_ec", "D50_vol_ec", "D90_vol_ec",
-        "mean_circularity", "mean_aspect_ratio", "mean_solidity", "irregular_frac", "seconds"]
+        "mean_circularity", "mean_aspect_ratio", "mean_solidity", "irregular_frac",
+        "satellite_count", "satellites_per_particle", "frac_with_satellites", "satellite_D50", "seconds"]
 
 
 def main():
@@ -44,6 +46,7 @@ def main():
     ap.add_argument("--um-per-px", type=float, default=None, help="force scale for all images (µm per pixel)")
     ap.add_argument("--scales", default=None, help="CSV with rows: filename,um_per_px (default: <folder>/scales.csv)")
     ap.add_argument("--out", default="out", help="output folder")
+    ap.add_argument("--no-satellites", action="store_true", help="skip satellite detection (~8 s/image faster)")
     a = ap.parse_args()
 
     import cv2
@@ -56,23 +59,27 @@ def main():
     if not imgs:
         sys.exit(f"no images found in {a.input}")
     out = Path(a.out)
-    for sub in ("particles", "psd", "overlays", "scale_debug"):
+    for sub in ("particles", "psd", "overlays", "scale_debug", "satellites"):
         (out / sub).mkdir(parents=True, exist_ok=True)
 
     rows, dfs, names = [], [], []
     t0 = time.time()
     for i, p in enumerate(imgs, 1):
         try:
-            df, s, lab, img, sc = analyze_image(p, a.method, um_per_px=a.um_per_px, sidecar=a.scales,
-                                                scale_debug=out / "scale_debug" / f"{p.stem}.png")
+            df, s, lab, img, sc, sats = analyze_image(p, a.method, um_per_px=a.um_per_px, sidecar=a.scales,
+                                                      scale_debug=out / "scale_debug" / f"{p.stem}.png",
+                                                      satellites=not a.no_satellites)
         except Exception as e:  # keep going on bad files
             print(f"[{i}/{len(imgs)}] {p.name}: FAILED ({e})")
             rows.append({"image": p.name, "method": a.method, "count": 0, "scale_source": f"error: {e}"})
             continue
         unit = s["size_unit"]
         df.to_csv(out / "particles" / f"{p.stem}.csv", index=False)
+        if sats is not None:
+            sats.to_csv(out / "satellites" / f"{p.stem}.csv", index=False)
+        sat_txt = f", {s['satellite_count']} satellites" if sats is not None else ""
         cv2.imwrite(str(out / "overlays" / f"{p.stem}.png"),
-                    overlay(img, lab, title=f"{p.name} {a.method} n={s['count']}"))
+                    overlay(img, lab, title=f"{p.name} {a.method} n={s['count']}{sat_txt}", sats=sats))
         if len(df):
             plot_psd(df, out / "psd" / f"{p.stem}.png", unit=unit,
                      title=f"{p.name}: n={s['count']}, D50 vol {s['D50_vol']:.1f} {unit}")
@@ -80,8 +87,10 @@ def main():
             names.append(p.stem)
         rows.append(s)
         flag = "" if unit == "um" else "  [UNCALIBRATED: px]"
+        sat_txt = (f", satellites {s['satellite_count']} ({s['frac_with_satellites']:.0%} of particles)"
+                   if sats is not None else "")
         print(f"[{i}/{len(imgs)}] {p.name}: n={s['count']} D50 num/vol = "
-              f"{s['D50_num']:.1f}/{s['D50_vol']:.1f} {unit} (scale: {s['scale_source']}){flag}")
+              f"{s['D50_num']:.1f}/{s['D50_vol']:.1f} {unit}{sat_txt} (scale: {s['scale_source']}){flag}")
 
     res = pd.DataFrame(rows)
     res = res[[c for c in COLS if c in res.columns]]

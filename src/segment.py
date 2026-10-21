@@ -132,8 +132,9 @@ def segment(img_u8: np.ndarray, method: str = "cellpose", **kw):
 
 
 # ------------------------------------------------------------ overlay
-def overlay(img_u8: np.ndarray, labels: np.ndarray, alpha=0.35, title=None) -> np.ndarray:
-    """BGR overlay: random colour fill + white-ish boundaries."""
+def overlay(img_u8: np.ndarray, labels: np.ndarray, alpha=0.35, title=None, sats=None) -> np.ndarray:
+    """BGR overlay: random colour fill + white-ish boundaries; satellites (if
+    given, DataFrame with x, y, r_px) as red circles."""
     rgb = cv2.cvtColor(img_u8, cv2.COLOR_GRAY2BGR).astype(np.float32)
     n = int(labels.max())
     if n:
@@ -145,6 +146,10 @@ def overlay(img_u8: np.ndarray, labels: np.ndarray, alpha=0.35, title=None) -> n
         b = segmentation.find_boundaries(labels, mode="inner")
         rgb[b] = cols[labels[b]] * 0.5 + 127
     out = np.clip(rgb, 0, 255).astype(np.uint8)
+    if sats is not None and len(sats):
+        for r in sats.itertuples():
+            cv2.circle(out, (int(round(r.x)), int(round(r.y))), max(2, int(round(r.r_px))), (0, 0, 255), 1,
+                       cv2.LINE_AA)
     if title:
         # yellow text on a black box (a thick black outline drawn as text spills
         # past the yellow glyphs and looks like extra digits: 'n=176' -> 'n=17676')
