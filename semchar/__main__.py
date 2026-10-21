@@ -8,7 +8,11 @@
   python -m semchar status              labeling progress
   python -m semchar visit2              fine-tune on corrected crops, test, final results
   python -m semchar analyze <folder> [--model NAME] [--um-per-px X] [--out DIR]
-  python -m semchar auto                visit1 if not done, else visit2 if labels reviewed, else status
+  python -m semchar qcmodels [--quick]  train + benchmark particle and satellite models on public labeled data,
+                                        pick the best, run QC on the real samples
+  python -m semchar qc <folder>         sphericity + satellites per sample (subfolder = sample), with 95% CIs
+  python -m semchar compare <before> <after>   is each QC metric different? (e.g. jet change)
+  python -m semchar auto                qcmodels if not done; else visit2 if labels reviewed; else status
 
 Results go to runs/<stage>_<timestamp>/ (SUMMARY.md, index.html, CSVs, overlays) and a zip of it.
 """
@@ -239,6 +243,91 @@ def analyze(inp, model=None, um_per_px=None, out=None):
     log(f"done: {run_dir / 'index.html'}")
 
 
+def qcmodels(quick=False):
+    import pandas as pd
+    from . import data as data_mod
+    from .qcmodels import PUBLISHED, run as train_bench, run_real_qc
+    from .report import table_html
+    run_dir, log = new_run("qcmodels", resume=False)
+    log("=== QC MODELS: train + benchmark particle and satellite models, QC the real samples ===")
+    env = envcheck(log)
+    json.dump(env, open(run_dir / "env.json", "w"), indent=1)
+    quick = quick or not env["cuda_available"]
+    for f in (data_mod.get_aa7075, data_mod.get_alloy2):   # real samples only; public data fetched below
+        try:
+            f()
+        except Exception as e:
+            log(f"  data: {f.__name__} failed: {e}")
+    bench, choice, sat_check = train_bench(run_dir, log=log, quick=quick)
+    real, ex = (pd.DataFrame(), None)
+    if len(choice) == 2:
+        log("--- QC of the real samples")
+        real, ex = run_real_qc(run_dir, log=log)
+    bcols = [c for c in ["task", "model", "subset", "n_images", "n_gt", "P@0.5", "R@0.5", "F1@0.5", "mean_iou",
+                         "pixel_P", "pixel_R", "sec_per_image"] if c in bench]
+    pub = pd.DataFrame([{"task": t, **v} for t, v in PUBLISHED.items()])
+    md = [f"# QC models ({run_dir.name})", "", f"GPU: {env.get('gpu', 'NONE (CPU quick run)')}", "",
+          f"Chosen: {json.dumps({k: v['name'] for k, v in choice.items()})}", "",
+          "## Benchmark on published validation images", bench[bcols].round(3).to_string(index=False) if len(bench) else "(none)",
+          "", "## Published", pub.to_string(index=False), "",
+          "## % satellited particles vs hand labels", sat_check.round(3).to_string(index=False) if len(sat_check) else "(none)",
+          "", "## QC of real samples", real.round(3).to_string(index=False) if len(real) else "(none)"]
+    if ex is not None:
+        md += ["", "## Example comparison: AA7075 base vs TiC surface-modified", ex.round(4).to_string(index=False)]
+    (run_dir / "SUMMARY.md").write_text(chr(10).join(md), encoding="utf-8")
+    (run_dir / "DONE").write_text(time.strftime("%c"))
+    secs = [("Benchmark (published validation images)", table_html(bench[bcols]) if len(bench) else "none"),
+            ("Published reference numbers", table_html(pub)),
+            ("% satellited particles vs hand labels", table_html(sat_check) if len(sat_check) else "none"),
+            ("QC of real samples", table_html(real) if len(real) else "none")]
+    if ex is not None:
+        secs.append(("Example comparison: AA7075 base vs TiC surface", table_html(ex)))
+    finish(run_dir, log, "QC models", secs)
+    log("=== QC MODELS DONE ===")
+
+
+def qc_folder(inp, um_per_px=None, out=None):
+    from .characterize import gather
+    from .qc import run as qc_run
+    from .report import simple_page, table_html
+    run_dir, log = (Path(out), Log(Path(out) / "log.txt")) if out else new_run("qc")
+    Path(run_dir).mkdir(parents=True, exist_ok=True)
+    log(f"QC of {inp}")
+    samples, _, _ = qc_run(gather(inp), run_dir, um_per_px=um_per_px, log=log)
+    log(chr(10) + samples.to_string(index=False))
+    simple_page(Path(run_dir) / "index.html", f"Powder QC: {inp}", [("Samples (95% bootstrap CIs)", table_html(samples))])
+    (RUNS / "LATEST.txt").write_text(Path(run_dir).name)
+    return run_dir, samples
+
+
+def compare_folders(a, b, um_per_px=None):
+    import numpy as np
+    from .characterize import gather
+    from .qc import compare, run as qc_run
+    from .report import simple_page, table_html
+    run_dir, log = new_run("compare")
+    log(f"compare A={a}  B={b}")
+    res = {}
+    from .qc import load_qc_models
+    ps, ss, _ = load_qc_models()
+    for tag, folder in (("A", a), ("B", b)):
+        items = [(tag, p) for _, p in gather(folder)]   # each folder pooled as one sample
+        samples, boots, points = qc_run(items, run_dir / tag, um_per_px=um_per_px, log=log, part_seg=ps, sat_seg=ss)
+        res[tag] = (samples, boots[tag], points[tag])
+    ps.close()
+    ss.close()
+    table = compare(res["A"][1], res["B"][1], res["A"][2], res["B"][2])
+    table.to_csv(run_dir / "comparison.csv", index=False)
+    log(chr(10) + table.round(4).to_string(index=False))
+    simple_page(run_dir / "index.html", "Before / after comparison",
+                [("Inputs", f"<p>A = {a}<br>B = {b}</p>"),
+                 ("Difference B - A with 95% bootstrap CI", table_html(table)),
+                 ("A", table_html(res["A"][0])), ("B", table_html(res["B"][0]))])
+    (RUNS / "LATEST.txt").write_text(run_dir.name)
+    _ = np
+    return table
+
+
 def show_status():
     from .labeling import status
     st = status()
@@ -250,8 +339,11 @@ def show_status():
 
 
 def auto(quick=False):
+    if not (ROOT / "models" / "qc_models.json").exists():
+        return qcmodels(quick)
     if latest("visit1") is None:
-        return visit1(quick)
+        print("QC models are trained. Use: run.cmd qc <folder>   or   run.cmd compare <before> <after>")
+        return
     from .labeling import status
     st = status()
     tr = st[(st.split == "train") & st.reviewed] if len(st) else st
@@ -289,8 +381,10 @@ def _session_log(stage):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["envcheck", "data", "visit1", "drafts", "label", "status", "visit2", "analyze", "auto"])
+    ap.add_argument("stage", choices=["envcheck", "data", "visit1", "drafts", "label", "status", "visit2", "analyze", "auto",
+                                     "qcmodels", "qc", "compare"])
     ap.add_argument("input", nargs="?")
+    ap.add_argument("input2", nargs="?")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--model")
     ap.add_argument("--um-per-px", type=float)
@@ -335,6 +429,16 @@ def _dispatch(a):
         analyze(a.input, a.model, a.um_per_px, a.out)
     elif a.stage == "auto":
         auto(a.quick)
+    elif a.stage == "qcmodels":
+        qcmodels(a.quick)
+    elif a.stage == "qc":
+        if not a.input:
+            sys.exit("usage: python -m semchar qc <folder>")
+        qc_folder(a.input, a.um_per_px, a.out)
+    elif a.stage == "compare":
+        if not (a.input and a.input2):
+            sys.exit("usage: python -m semchar compare <before_folder> <after_folder>")
+        compare_folders(a.input, a.input2, a.um_per_px)
 
 
 if __name__ == "__main__":

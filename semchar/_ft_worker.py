@@ -24,8 +24,15 @@ def main(cfg_path):
     if cfg.get("labels_dir"):
         from pathlib import Path
         L.LABELS = Path(cfg["labels_dir"])
-    tr_i, tr_m, _ = load_split("train")
-    va_i, va_m, _ = load_split("val")
+    if cfg.get("data_pickle"):
+        import pickle
+        with open(cfg["data_pickle"], "rb") as f:
+            d = pickle.load(f)
+        tr_i, tr_m = d["train"]
+        va_i, va_m = d["val"]
+    else:
+        tr_i, tr_m, _ = load_split("train")
+        va_i, va_m, _ = load_split("val")
     if torch.cuda.is_available():
         # Recent NVIDIA Windows drivers spill to system RAM instead of failing when GPU memory runs out
         # (sysmem fallback), making training crawl and the page file balloon. Cap PyTorch at the real VRAM
@@ -42,7 +49,7 @@ def main(cfg_path):
                       test_data=va_i or None, test_labels=va_m or None,
                       batch_size=cfg["batch_size"], learning_rate=cfg["lr"], weight_decay=0.1,
                       n_epochs=cfg["n_epochs"], save_path=cfg["run_dir"], save_every=cfg["save_every"],
-                      save_each=True, nimg_per_epoch=max(16, len(tr_i)), model_name="cpsam_powder",
+                      save_each=True, nimg_per_epoch=cfg.get("nimg_per_epoch") or max(16, len(tr_i)), model_name="cpsam_powder",
                       min_train_masks=1)
     peak = torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0
     json.dump({"ok": True, "minutes": (time.time() - t0) / 60, "peak_vram_gb": peak,

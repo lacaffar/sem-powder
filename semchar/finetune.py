@@ -55,25 +55,39 @@ def eval_masks(seg, imgs, masks, names):
 
 
 def train(log=print, n_epochs=None, save_every=None, lr=1e-5, attempts=None):
+    """Visit 2: fine-tune on the user's corrected crops -> models/cpsam_powder."""
+    tr = load_split("train")
+    va = load_split("val")
+    log(f"fine-tune: {len(tr[0])} train crops, {len(va[0])} val crops (reviewed only)")
+    if len(tr[0]) < 4:
+        raise RuntimeError(f"only {len(tr[0])} reviewed training crops; review at least 4 (ideally all) first")
+    return train_cellpose(tr, va, FINAL, log=log, n_epochs=n_epochs, save_every=save_every, lr=lr,
+                          attempts=attempts)
+
+
+def train_cellpose(tr, va, final_path, log=print, n_epochs=None, save_every=None, lr=1e-5, attempts=None,
+                   nimg_per_epoch=None):
+    """Fine-tune Cellpose-SAM on (images, masks, names) lists; pick the epoch on va; copy to final_path.
+    Each memory setting runs in a child process (GPU out-of-memory can crash the CUDA runtime)."""
     import os
+    import pickle
     import subprocess
     import sys
+    import threading
     n_epochs = n_epochs or int(os.environ.get("SEMCHAR_FT_EPOCHS", 200))        # env overrides: quick tests
     save_every = save_every or int(os.environ.get("SEMCHAR_FT_SAVE_EVERY", 25))
-    from . import labeling as L
-    tr_i, tr_m, tr_n = load_split("train")
-    va_i, va_m, va_n = load_split("val")
-    log(f"fine-tune: {len(tr_i)} train crops, {len(va_i)} val crops (reviewed only)")
-    if len(tr_i) < 4:
-        raise RuntimeError(f"only {len(tr_i)} reviewed training crops; review at least 4 (ideally all) first")
-    run_dir = MODELS / "runs" / time.strftime("%Y%m%d-%H%M%S")
+    final_path = Path(final_path)
+    run_dir = MODELS / "runs" / f"{final_path.name}_{time.strftime('%Y%m%d-%H%M%S')}"
     (run_dir / "models").mkdir(parents=True, exist_ok=True)
+    data_p = run_dir / "data.pkl"
+    with open(data_p, "wb") as f:
+        pickle.dump({"train": (tr[0], tr[1]), "val": (va[0], va[1])}, f)
     cfg = None
     for bs, frozen in (attempts or ATTEMPTS):
         log(f"  attempt: batch {bs}, {frozen} of 24 encoder blocks frozen")
         c = {"batch_size": bs, "frozen": frozen, "n_epochs": n_epochs, "save_every": save_every, "lr": lr,
              "run_dir": str(run_dir), "result": str(run_dir / f"result_b{bs}_f{frozen}.json"),
-             "labels_dir": str(L.LABELS)}
+             "data_pickle": str(data_p), "nimg_per_epoch": nimg_per_epoch}
         cp = run_dir / f"cfg_b{bs}_f{frozen}.json"
         cp.write_text(json.dumps(c))
         for old in (run_dir / "models").glob("cpsam_powder*"):   # partial files from a failed attempt
@@ -87,7 +101,6 @@ def train(log=print, n_epochs=None, save_every=None, lr=1e-5, attempts=None):
                                 errors="replace")
         oom = False
         limit_s = float(os.environ.get("SEMCHAR_FT_TIMEOUT_H", 4)) * 3600   # watchdog per attempt
-        import threading
         timer = threading.Timer(limit_s, proc.kill)
         timer.start()
         for line in proc.stdout:
@@ -106,31 +119,31 @@ def train(log=print, n_epochs=None, save_every=None, lr=1e-5, attempts=None):
             r = json.loads(res.read_text())
             log(f"  trained in {r['minutes']:.1f} min, peak GPU memory {r['peak_vram_gb']:.1f} GB, "
                 f"{r['trainable_params_m']:.0f}M trainable parameters")
-            cfg = {**c, **r, "train_crops": tr_n, "val_crops": va_n}
+            cfg = {**c, **r, "train_items": list(tr[2]), "val_items": list(va[2])}
             break
         log(f"  attempt failed (exit {proc.returncode}{', out of GPU memory' if oom else ''}); trying a lighter setting")
+    data_p.unlink(missing_ok=True)
     if cfg is None:
         raise RuntimeError("fine-tuning failed for every memory setting; see log")
-    # choose the checkpoint on the validation crops
     ckpts = sorted((run_dir / "models").glob("cpsam_powder_epoch_*")) + [run_dir / "models" / "cpsam_powder"]
-    eval_i, eval_m, eval_n = (va_i, va_m, va_n) if va_i else (tr_i, tr_m, tr_n)
+    eval_i, eval_m, eval_n = va if va[0] else tr
     rows = []
     for ck in ckpts:
         seg = CellposeSeg(ck, "native", name=ck.name)
         p = pool(eval_masks(seg, eval_i, eval_m, eval_n))
         seg.close()
         rows.append({"checkpoint": ck.name, **p})
-        log(f"  {ck.name}: {'val' if va_i else 'train'} F1@0.5={p['F1@0.5']:.3f} IoU={p['mean_iou_matched']:.3f}")
+        log(f"  {ck.name}: {'val' if va[0] else 'train'} F1@0.5={p['F1@0.5']:.3f} IoU={p['mean_iou_matched']:.3f}")
     sel = pd.DataFrame(rows).sort_values("F1@0.5", ascending=False)
     sel.to_csv(run_dir / "checkpoint_selection.csv", index=False)
     best = run_dir / "models" / sel.iloc[0]["checkpoint"]
-    MODELS.mkdir(exist_ok=True)
-    shutil.copy(best, FINAL)
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(best, final_path)
     cfg["chosen_checkpoint"] = best.name
-    (MODELS / "cpsam_powder.json").write_text(json.dumps(cfg, indent=1))
-    for ck in ckpts:   # 1.2 GB each; the chosen one is copied to models/cpsam_powder
+    final_path.with_suffix(".json").write_text(json.dumps(cfg, indent=1))
+    for ck in ckpts:   # 1.2 GB each; the chosen one is copied to final_path
         ck.unlink(missing_ok=True)
-    log(f"  chosen {best.name} -> {FINAL}")
+    log(f"  chosen {best.name} -> {final_path}")
     return sel
 
 
