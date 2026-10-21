@@ -4,7 +4,33 @@ Particle size and shape statistics from SEM images of metal powder, built on Cel
 (a 2025 foundation segmentation model), fine-tuned on corrected SEM outlines, run in batches on a GPU.
 Attempt 1 (classical watershed + zero-shot Cellpose 3, CPU) is archived in [`attempt1/`](attempt1/ATTEMPT1.md).
 
-## On the Hunt GPU PC
+## Powder QC: sphere fraction and satellites before/after a jet change
+
+Models: Cellpose-SAM fine-tuned on AMPIS particle outlines (F1 0.93 on the published validation image; Cohn 2021
+Mask R-CNN: P 0.94, R 0.80) and Mask R-CNN for satellites (AMPIS + SALAS labels). Results in [PROGRESS.md](PROGRESS.md).
+
+On the Hunt PC, in Windows PowerShell:
+
+```
+$env:SEM_STAGE = "qcmodels"
+irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex
+```
+
+trains (first time, ~75 min; reused afterwards, `SEMCHAR_RETRAIN=1` retrains) and benchmarks the models. Then, in
+`%USERPROFILE%\sem-powder`:
+
+```
+.\run.cmd qc C:\path\to\images
+.\run.cmd compare C:\path\to\before C:\path\to\after
+```
+
+`qc`: per sample (one subfolder per sample) % spherical (minor/major axis >= 0.90), median sphericity, % satellited
+particles, satellites per particle, D10/D50/D90, each with a 95% bootstrap CI (1000 resamples; whole images when a
+sample has 3 or more, else particles). `compare`: B - A for every metric with 95% CI, p-value and CHANGED / no
+detectable change. Use 5 or more images per condition at the same magnification so the CI covers field-to-field
+variation. The scale bar is read from the image; otherwise pass `--um-per-px`.
+
+## On the Hunt GPU PC (original size/shape workflow)
 
 Open **Windows PowerShell** and paste:
 

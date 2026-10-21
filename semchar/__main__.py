@@ -263,7 +263,7 @@ def qcmodels(quick=False):
     if len(choice) == 2:
         log("--- QC of the real samples")
         real, ex = run_real_qc(run_dir, log=log)
-    bcols = [c for c in ["task", "model", "subset", "n_images", "n_gt", "P@0.5", "R@0.5", "F1@0.5", "mean_iou",
+    bcols = [c for c in ["task", "model", "subset", "n_images", "n_gt", "P@0.5", "R@0.5", "F1@0.5", "count_ratio", "mean_iou",
                          "pixel_P", "pixel_R", "sec_per_image"] if c in bench]
     pub = pd.DataFrame([{"task": t, **v} for t, v in PUBLISHED.items()])
     md = [f"# QC models ({run_dir.name})", "", f"GPU: {env.get('gpu', 'NONE (CPU quick run)')}", "",

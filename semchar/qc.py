@@ -145,7 +145,8 @@ def _load(spec, satellites=False):
     from .models import ROOT, CellposeSeg
     p = ROOT / spec["path"]
     if spec["kind"] == "maskrcnn":
-        s = MaskRCNNSeg(p, name=spec["name"], min_area=8 if satellites else classic.MIN_AREA_PX)
+        kw = {k: spec[k] for k in ("score_thresh", "scale") if k in spec}
+        s = MaskRCNNSeg(p, name=spec["name"], min_area=8 if satellites else classic.MIN_AREA_PX, **kw)
     else:
         s = CellposeSeg(p, "native", name=spec["name"])
     return s

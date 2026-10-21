@@ -128,7 +128,10 @@ def train(train_items, out_path, iters=None, batch=2, lr=0.01, log=print, seed=0
 
 
 class MaskRCNNSeg(Segmenter):
-    def __init__(self, path, name="mrcnn", score_thresh=0.5, min_area=classic.MIN_AREA_PX):
+    """score_thresh: keep detections scoring >= this. scale: image upscale at inference
+    (training saw crops upscaled by SCALE = 1.5625)."""
+
+    def __init__(self, path, name="mrcnn", score_thresh=0.5, min_area=classic.MIN_AREA_PX, scale=SCALE):
         import torch
         self.name = name
         self.dev = torch_device()
@@ -137,25 +140,51 @@ class MaskRCNNSeg(Segmenter):
         self.model.to(self.dev).eval()
         self.score_thresh = score_thresh
         self.min_area = min_area
+        self.scale = scale
 
-    def segment(self, img_u8):
+    def predict(self, img_u8, scale=None, min_score=None):
+        """-> (bool masks N x H x W, scores N), detections scoring >= min_score."""
         import torch
+        scale = scale or self.scale
+        min_score = self.score_thresh if min_score is None else min_score
         H, W = img_u8.shape
-        self.model.transform.min_size = (int(round(min(H, W) * SCALE)),)
-        self.model.transform.max_size = int(round(max(H, W) * SCALE)) + 1
-        t = torch.from_numpy(img_u8).float().div(255).expand(3, H, W).clone().to(self.dev)
-        with torch.no_grad(), torch.autocast(device_type=self.dev.type, enabled=self.dev.type == "cuda"):
-            out = self.model([t])[0]
+        self.model.transform.min_size = (int(round(min(H, W) * scale)),)
+        self.model.transform.max_size = int(round(max(H, W) * scale)) + 1
+        # drop low scores before masks are pasted at full image size (N x H x W floats)
+        self.model.roi_heads.score_thresh = float(min_score)
+        t = torch.from_numpy(img_u8).float().div(255).expand(3, H, W).clone()
+        try:
+            out = self._forward(t, self.dev)
+        except torch.cuda.OutOfMemoryError:
+            free_gpu()
+            self.model.to("cpu")
+            try:
+                out = self._forward(t, torch.device("cpu"))
+            finally:
+                self.model.to(self.dev)
         scores = out["scores"].float().cpu().numpy()
-        masks = (out["masks"][:, 0].float().cpu().numpy() > 0.5)
-        lab = np.zeros((H, W), np.int32)
+        masks = (out["masks"][:, 0] > 0.5).cpu().numpy()
+        return masks, scores
+
+    def _forward(self, t, dev):
+        import torch
+        with torch.no_grad(), torch.autocast(device_type=dev.type, enabled=dev.type == "cuda"):
+            return self.model([t.to(dev)])[0]
+
+    @staticmethod
+    def to_labels(masks, scores, thresh, shape):
+        lab = np.zeros(shape, np.int32)
         k = 0
         for i in np.argsort(scores):          # low score first; higher scores paint over
-            if scores[i] < self.score_thresh:
+            if scores[i] < thresh:
                 continue
             k += 1
             lab[masks[i]] = k
         return lab
+
+    def segment(self, img_u8):
+        masks, scores = self.predict(img_u8)
+        return self.to_labels(masks, scores, self.score_thresh, img_u8.shape)
 
     def close(self):
         del self.model

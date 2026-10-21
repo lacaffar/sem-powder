@@ -14,6 +14,34 @@
 5. For you: visit 1 at Hunt, then correct drafts (LABELING.md), then visit 2. Check whether Hunt GPU PCs log out
    idle sessions; the program keeps Windows awake but cannot override a forced logoff.
 
+## QC direction, Hunt run 1 (`qcmodels`, 2026-10-21, Quadro RTX 4000, 1 h 13 min, no failures)
+Goal set by Ben: QC of sphere fraction and satellites before/after an atomizer jet change. Models trained on public
+labeled SEM powder data (AMPIS Ni superalloy, SALAS 5 alloys), scored on the published validation images.
+
+| Task | Model | P@0.5 | R@0.5 | F1@0.5 | Published (Cohn 2021) |
+|---|---|---|---|---|---|
+| particles (238 outlines) | cpsam zero-shot | 0.873 | 0.899 | 0.886 | P 0.938, R 0.799 |
+| particles | cp_particles (Cellpose-SAM fine-tuned, epoch 20) | **0.940** | **0.929** | **0.934** | |
+| particles | mrcnn_particles (Mask R-CNN, 2500 iters) | 0.939 | 0.903 | 0.921 | |
+| satellites (638 outlines, 8 images) | cp_satellites | 0.660 | 0.343 | 0.452 | P 0.692, R 0.545 |
+| satellites | mrcnn_satellites | 0.597 | 0.745 | **0.662** | |
+
+- Chosen: cp_particles + mrcnn_satellites. Particles beat the published Mask R-CNN on recall at equal precision.
+- Satellites: F1 above Cohn's (0.61) but the model over-detects (796 predicted vs 638 labeled; pixel precision
+  0.57). On the AMPIS image with both label sets: 30.4% satellited vs 21.9% by hand (0.61 vs 0.35 satellites per
+  particle). Fix in run 2: sweep inference scale x score threshold, scored leave-one-image-out.
+  Laptop test of the sweep with a weak 300-iteration model: held-out F1 0.588 -> 0.628, count ratio 1.12, best
+  setting scale 1.5625 / score >= 0.7; on the check image 44% -> 32% satellited (hand 22%).
+  Run 2 also reuses the trained models (`SEMCHAR_RETRAIN=1` retrains) and drops low-score detections before full-size
+  masks are built (an untrained-looking model ran a 6 GB card out of memory there; CPU fallback per image).
+- Cellpose fine-tuning on 8 GB: batch 2 and batch 1 full ran out of memory; batch 1 with 12 frozen blocks fitted
+  (4.6 GB, 11.6 min for 100 epochs). Mask R-CNN: batch 2, 2.9 GB, 16-23 min.
+- Real samples (1 frame each, bootstrap over particles): Ti-6Al-4V 80% spherical (sphericity >= 0.90), 9% satellited;
+  Ti64+Cu blends 63-69% / 15-19%; AA7075 base 41% / 25%. Example compare AA7075 base vs TiC surface: satellited
+  -11 points (95% CI -19 to -4), D50 number -4.7 um; sphere fraction no detectable change.
+- Overlays checked by eye: particle outlines tight on Ti64 and AA7075; satellites miss some small bumps on Ti64 and
+  flag a few dark fines in AA7075.
+
 ## Decisions
 - Engine: Cellpose-SAM `cpsam_v2` (cellpose 4.2.1.1). Reasons: best-reported generalist instance segmenter in 2025-26
   benchmarks, size/noise robust, built-in fine-tuning and GUI for corrections. Zero-shot test on AA7075 showed whole
