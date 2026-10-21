@@ -146,7 +146,11 @@ def overlay(img_u8: np.ndarray, labels: np.ndarray, alpha=0.35, title=None) -> n
         rgb[b] = cols[labels[b]] * 0.5 + 127
     out = np.clip(rgb, 0, 255).astype(np.uint8)
     if title:
+        # yellow text on a black box (a thick black outline drawn as text spills
+        # past the yellow glyphs and looks like extra digits: 'n=176' -> 'n=17676')
         s = max(0.5, img_u8.shape[1] / 1400)
-        cv2.putText(out, title, (8, int(28 * s)), cv2.FONT_HERSHEY_SIMPLEX, s, (0, 0, 0), 4)
-        cv2.putText(out, title, (8, int(28 * s)), cv2.FONT_HERSHEY_SIMPLEX, s, (0, 255, 255), 1)
+        (tw, th), base = cv2.getTextSize(title, cv2.FONT_HERSHEY_SIMPLEX, s, 1)
+        y = int(28 * s)
+        cv2.rectangle(out, (4, y - th - 4), (12 + tw, y + base + 2), (0, 0, 0), -1)
+        cv2.putText(out, title, (8, y), cv2.FONT_HERSHEY_SIMPLEX, s, (0, 255, 255), 1, cv2.LINE_AA)
     return out
