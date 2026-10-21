@@ -90,7 +90,20 @@ def run(models, out_dir, n_decost=12, n_dense=40, budget_s=2400, log=print):
     refs = {k: reference(k) for k in REAL_SAMPLES if (DATA / REAL_SAMPLES[k][0]).exists()}
     real_items = [(k, DATA / REAL_SAMPLES[k][0]) for k in refs]
     pooled = []
+    prev = {}
+    if (out / "shootout.csv").exists():   # resuming: keep models that finished cleanly
+        try:
+            for r in pd.read_csv(out / "shootout.csv").to_dict("records"):
+                done = (r.get("error") != r.get("error") or not r.get("error")) and (out / "real" / r["model"] / "samples.csv").exists()
+                if done:
+                    prev[r["model"]] = r
+        except Exception:
+            prev = {}
     for name in models:
+        if name in prev:
+            log(f"== model {name}: already done in this run, reusing")
+            pooled.append(prev[name])
+            continue
         log(f"== model {name}")
         try:
             seg = make(name)

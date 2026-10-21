@@ -24,6 +24,17 @@ DECOST_URL = ("https://data.mendeley.com/public-files/datasets/tj4syyj9mr/files/
 DECOST_SHA = "ef4d4a15a4596566d759b7964a145dba45edff44d86145e1d056e5eeccf7f63d"
 DECOST_KEEP = 24
 ZENODO = "https://zenodo.org/records/17037765/files/{}?download=1"
+MIRROR = ROOT / "data_mirror"   # committed fallback copies (see data_mirror/README.md)
+
+
+def from_mirror(sub, names):
+    src = MIRROR / sub
+    dst = DATA / sub
+    dst.mkdir(parents=True, exist_ok=True)
+    for n in names:
+        if not (dst / n).exists() and (src / n).exists():
+            shutil.copy(src / n, dst / n)
+    log(f"{sub}: used the committed mirror copy (original source unreachable)")
 
 
 def log(msg):
@@ -56,13 +67,18 @@ def get_aa7075():
     if all((d / w).exists() for w in want):
         log("aa7075 present")
     else:
-        log("aa7075: listing Mendeley 42gzbgk5hb v3")
-        files = mendeley_files("42gzbgk5hb", 3)
-        for f in files:
-            name = f["path"].split("/")[-1]
-            if name in want and not (d / name).exists():
-                log(f"  {name} ({f['size'] / 1e6:.1f} MB)")
-                fetch(f["url"], d / name)
+        try:
+            log("aa7075: listing Mendeley 42gzbgk5hb v3")
+            files = mendeley_files("42gzbgk5hb", 3)
+            for f in files:
+                name = f["path"].split("/")[-1]
+                if name in want and not (d / name).exists():
+                    log(f"  {name} ({f['size'] / 1e6:.1f} MB)")
+                    fetch(f["url"], d / name)
+        except Exception as e:
+            log(f"aa7075: Mendeley failed ({e})")
+        if not all((d / w).exists() for w in want):
+            from_mirror("aa7075", want)
     shutil.copy(ROOT / "configs" / "scales_aa7075.csv", d / "scales.csv")  # Fig 2c has no SEM metadata
 
 
@@ -73,15 +89,19 @@ def get_alloy2():
         log("alloy2 present")
         return
     d.mkdir(parents=True, exist_ok=True)
-    for z, keep in [("Particle_shape.zip", ".tif"), ("Particle_size_distribution.zip", ".xlsx")]:
-        log(f"alloy2: {z}")
-        tmp = DATA / "_dl" / z
-        fetch(ZENODO.format(z), tmp)
-        with zipfile.ZipFile(tmp) as zf:
-            for n in zf.namelist():
-                if n.endswith(keep):
-                    (d / Path(n).name).write_bytes(zf.read(n))
-        tmp.unlink()
+    try:
+        for z, keep in [("Particle_shape.zip", ".tif"), ("Particle_size_distribution.zip", ".xlsx")]:
+            log(f"alloy2: {z}")
+            tmp = DATA / "_dl" / z
+            fetch(ZENODO.format(z), tmp)
+            with zipfile.ZipFile(tmp) as zf:   # Zenodo answers 403 HTML when it rate-limits a network
+                for n in zf.namelist():
+                    if n.endswith(keep):
+                        (d / Path(n).name).write_bytes(zf.read(n))
+            tmp.unlink()
+    except Exception as e:
+        log(f"alloy2: Zenodo failed ({e})")
+        from_mirror("alloy2", tifs + ["Table2_ParticleSizeDistribution.xlsx"])
 
 
 def get_decost():

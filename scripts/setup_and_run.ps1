@@ -55,7 +55,7 @@ $stampFile = Join-Path $Root ".venv\semchar-env.txt"
 $stampHave = if (Test-Path $stampFile) { (Get-Content $stampFile -Raw).Trim() } else { "" }
 if (-not (Test-Path $Py) -or $stampHave -ne $stampWant) {
     Say "Installing Python 3.12 + packages ($flavor). First time: ~10-20 min, ~6 GB."
-    & $Uv python install 3.12
+    & $Uv python install 3.12 --no-bin
     if ($LASTEXITCODE -ne 0) { Fail "Python install failed" }
     if (-not (Test-Path $Py)) {
         & $Uv venv --python 3.12 (Join-Path $Root ".venv")

@@ -50,10 +50,32 @@ class Log:
         self.f.flush()
 
 
-def new_run(stage):
+def new_run(stage, resume=False):
+    """New run directory, or (resume=True) the latest unfinished one from the last 3 days."""
+    if resume:
+        cands = sorted(d for d in RUNS.glob(f"{stage}_*") if d.is_dir() and not (d / "DONE").exists()
+                       and time.time() - d.stat().st_mtime < 3 * 86400)
+        if cands:
+            d = cands[-1]
+            log = Log(d / "log.txt")
+            log(f"=== resuming unfinished run {d.name} ===")
+            return d, log
     d = RUNS / f"{stage}_{time.strftime('%Y%m%d-%H%M%S')}"
     d.mkdir(parents=True, exist_ok=True)
     return d, Log(d / "log.txt")
+
+
+def keep_awake(on=True):
+    """Ask Windows not to sleep while a long stage runs (does not override forced logoff policies)."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x00000001, 0x00000002
+        flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED if on else ES_CONTINUOUS
+        ctypes.windll.kernel32.SetThreadExecutionState(flags)
+    except Exception:
+        pass
 
 
 def envcheck(log=print):
@@ -108,7 +130,7 @@ def visit1(quick=False):
     from .models import ALL_ZERO_SHOT, make
     from .report import table_html
     from .shootout import run as shootout
-    run_dir, log = new_run("visit1")
+    run_dir, log = new_run("visit1", resume=True)
     log("=== VISIT 1: setup check, model shoot-out, characterization, labeling drafts ===")
     env = envcheck(log)
     json.dump(env, open(run_dir / "env.json", "w"), indent=1)
@@ -276,6 +298,7 @@ def main():
     a = ap.parse_args()
     if a.stage not in ("status", "label"):
         _session_log(a.stage)
+        keep_awake(True)
     try:
         _dispatch(a)
     except Exception:
