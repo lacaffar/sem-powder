@@ -6,7 +6,9 @@
 2. Hunt PC: one command (`irm https://raw.githubusercontent.com/lacaffar/sem-powder/main/hunt.ps1 | iex`) installs
    tools, clones/updates, sets up CUDA Python, downloads data, runs the next stage. Tested in Windows PowerShell 5.1
    on the dev laptop from GitHub (fresh clone + update path).
-3. Visit 1 rehearsed end to end on the dev laptop GPU (RTX A1000 6 GB, float32 like the Hunt Quadro): see below.
+3. Visit 1 rehearsed end to end on the dev laptop GPU (RTX A1000 6 GB, float32 like the Hunt Quadro): 1 h 48 min,
+   no errors; best zero-shot model cpsam_auto. Visit 2 rehearsed with stand-in labels: OK. Final check: fresh clone
+   from GitHub via the one-liner + `run.cmd visit1 --quick` (fresh data and model downloads): OK in 8 min.
 4. Fine-tuning code path tested on the laptop GPU with stand-in labels: full fine-tuning at batch 2 runs out of 6 GB;
    each attempt now runs in a child process and falls back (batch 1, then 12 or 20 frozen encoder blocks).
 5. For you: visit 1 at Hunt, then correct drafts (LABELING.md), then visit 2. Check whether Hunt GPU PCs log out
